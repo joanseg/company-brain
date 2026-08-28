@@ -1,0 +1,11 @@
+# Python environments — rebuilt by /brain-setup
+plugins/*/server/.venv/
+plugins/*/embed/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Derived brain state, if anyone indexes from inside this repo
+.company-brain/
+
+.DS_Store

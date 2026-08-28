@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "company-brain",
+  "owner": { "name": "Joanseg", "url": "https://github.com/joanseg" },
+  "description": "A GraphRAG knowledge brain over your own markdown repositories.",
+  "plugins": [
+    {
+      "name": "company-brain",
+      "description": "Ask questions of your markdown and get answers with file-and-line citations. Hybrid lexical + semantic + graph retrieval, entirely local.",
+      "category": "knowledge",
+      "version": "0.1.0",
+      "source": "./plugins/company-brain"
+    }
+  ]
+}

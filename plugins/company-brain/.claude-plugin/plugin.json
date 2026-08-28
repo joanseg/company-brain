@@ -1,0 +1,39 @@
+{
+  "name": "company-brain",
+  "version": "0.1.0",
+  "displayName": "Company Brain",
+  "description": "GraphRAG company brain over your markdown repos: hybrid lexical + semantic + graph retrieval with citations, and a capture path for new knowledge.",
+  "license": "MIT",
+  "homepage": "https://github.com/joanseg/company-brain",
+  "repository": "https://github.com/joanseg/company-brain",
+  "author": {
+    "name": "Joan Senent"
+  },
+  "keywords": [
+    "knowledge",
+    "graphrag",
+    "retrieval",
+    "memory",
+    "search"
+  ],
+  "userConfig": {
+    "embedding_model": {
+      "type": "string",
+      "title": "Embedding model",
+      "description": "sentence-transformers model used for dense retrieval. Multilingual by default.",
+      "default": "BAAI/bge-m3"
+    },
+    "enrich_batch_size": {
+      "type": "number",
+      "title": "Enrichment batch size",
+      "description": "Chunks handed to each extraction subagent by /brain-enrich.",
+      "default": 15
+    },
+    "view_port": {
+      "type": "number",
+      "title": "Dashboard port",
+      "description": "Localhost port for the read-only brain dashboard.",
+      "default": 4717
+    }
+  }
+}

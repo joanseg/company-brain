@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "brain": {
+      "command": "uv",
+      "args": [
+        "run", "--project", "${CLAUDE_PLUGIN_ROOT}/server",
+        "python", "-m", "company_brain.mcp_server"
+      ],
+      "env": {
+        "COMPANY_BRAIN_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
+        "COMPANY_BRAIN_EMBED_MODEL": "${user_config.embedding_model}",
+        "COMPANY_BRAIN_VIEW_PORT": "${user_config.view_port}"
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+[project]
+name = "company-brain-embed"
+version = "0.1.0"
+description = "Local multilingual embedding worker for the Company Brain plugin."
+requires-python = ">=3.11"
+dependencies = [
+    "sentence-transformers>=3.0",
+    "torch>=2.2",
+]

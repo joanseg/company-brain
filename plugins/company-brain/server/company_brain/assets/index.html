@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company Brain</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <h1>Company Brain</h1>
+    <div id="health" class="health"></div>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="communities" class="active">Communities</button>
+    <button role="tab" data-tab="graph">Graph</button>
+    <button role="tab" data-tab="corpus">Corpus</button>
+  </nav>
+  <p id="tab-hint"></p>
+  <main>
+    <section id="tab-communities" class="tab"></section>
+    <section id="tab-graph" class="tab" hidden></section>
+    <section id="tab-corpus" class="tab" hidden></section>
+    <aside id="panel"></aside>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
