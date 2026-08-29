@@ -1,0 +1,206 @@
+<article class="explain">
+
+<p class="lede">The brain reads your markdown and answers questions about it, citing the exact line. Here is what happens in between, and which command drives each part.</p>
+
+<h3 class="xh">Why searching for words isn't enough</h3>
+<p>Ask <em>"how do merchants get their money faster?"</em> when the document that answers it says <em>"settlement latency compresses working capital"</em> — not one word matches, and ordinary search finds nothing. Search a common word instead and you get four hundred hits. Too few, then too many.</p>
+<p>The brain solves both by never relying on one method. It looks for your question in <b>three completely different ways at once</b>, then combines the answers.</p>
+
+<h3 class="xh">Step 1 · Documents become index cards</h3>
+<p>A whole document is the wrong unit. A 12,000-word paper might answer your question in one paragraph; return the file and you've handed someone a haystack.</p>
+<p>So each document is cut into <b>chunks</b> of about 240 words — index cards. Every card remembers its document, the heading it sat under, and the line it starts at. That is how a citation like <code>strategy/uk.md:365</code> is possible at all.</p>
+<p>Cards are cut at <b>heading boundaries</b> first, so one never straddles two unrelated sections, and consecutive cards <b>overlap by 36 words</b>, so a sentence falling on a cut still survives whole on one side of it.</p>
+
+<figure>
+<svg viewBox="0 0 700 190" role="img" aria-label="A document is cut into overlapping chunks at heading boundaries, each keeping its path, heading and line number.">
+  <defs><marker id="xa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+  <text x="0" y="12" font-size="11" fill="currentColor" opacity=".6">uk-market.md</text>
+  <rect x="0" y="22" width="140" height="146" fill="none" stroke="currentColor" opacity=".4" rx="2"/>
+  <line x1="12" y1="44" x2="98" y2="44" stroke="currentColor" stroke-width="3" opacity=".75"/>
+  <line x1="12" y1="60" x2="128" y2="60" stroke="currentColor" opacity=".3"/>
+  <line x1="12" y1="72" x2="128" y2="72" stroke="currentColor" opacity=".3"/>
+  <line x1="12" y1="84" x2="112" y2="84" stroke="currentColor" opacity=".3"/>
+  <line x1="12" y1="106" x2="84" y2="106" stroke="currentColor" stroke-width="3" opacity=".75"/>
+  <line x1="12" y1="122" x2="128" y2="122" stroke="currentColor" opacity=".3"/>
+  <line x1="12" y1="134" x2="128" y2="134" stroke="currentColor" opacity=".3"/>
+  <line x1="12" y1="146" x2="104" y2="146" stroke="currentColor" opacity=".3"/>
+  <line x1="156" y1="95" x2="198" y2="95" stroke="currentColor" stroke-width="1.4" marker-end="url(#xa)"/>
+  <text x="177" y="85" font-size="10" fill="currentColor" text-anchor="middle" opacity=".6">cut</text>
+  <rect x="216" y="28" width="196" height="58" fill="none" stroke="currentColor" opacity=".65" rx="2"/>
+  <text x="228" y="47" font-size="11" fill="currentColor">chunk 1 · ~240 words</text>
+  <text x="228" y="64" font-size="10" fill="currentColor" opacity=".55">heading: 5. Sterling</text>
+  <text x="228" y="77" font-size="10" fill="currentColor" opacity=".55">line 341</text>
+  <rect x="216" y="102" width="196" height="58" fill="none" stroke="currentColor" opacity=".65" rx="2"/>
+  <text x="228" y="121" font-size="11" fill="currentColor">chunk 2 · ~240 words</text>
+  <text x="228" y="138" font-size="10" fill="currentColor" opacity=".55">heading: 5.1 tGBP</text>
+  <text x="228" y="151" font-size="10" fill="currentColor" opacity=".55">line 365</text>
+  <rect x="222" y="83" width="184" height="24" style="fill:var(--accent);opacity:.18"/>
+  <line x1="430" y1="95" x2="462" y2="95" style="stroke:var(--accent);color:var(--accent)" stroke-width="1.4" marker-end="url(#xa)"/>
+  <text x="474" y="91" font-size="11" style="fill:var(--accent)">36-word overlap</text>
+  <text x="474" y="106" font-size="10" fill="currentColor" opacity=".55">a sentence on the seam</text>
+  <text x="474" y="119" font-size="10" fill="currentColor" opacity=".55">survives intact</text>
+</svg>
+<figcaption>Cutting happens at headings, so a card is always about one thing. The shaded band is the overlap.</figcaption>
+</figure>
+
+<div class="does"><code>/brain-index</code><span>Does the cutting — walks every connected repository and rebuilds the cards for anything whose text changed.</span></div>
+<div class="does"><code>/brain-source</code><span>Decides <b>which</b> repositories get walked.</span></div>
+
+<h3 class="xh">Step 2 · Three ways to find a card</h3>
+
+<h4 class="xh4">One — the exact words</h4>
+<p>Which cards literally contain your words? This uses <b>BM25</b>, a fifty-year-old scoring rule that is still excellent. Two ideas do the work: more mentions beat fewer, and a <b>rare word counts for far more than a common one</b>. Matching a company's registered name is strong evidence; matching "the" is none.</p>
+<p>Unbeatable for names, codes and exact phrases. Useless for a paraphrase.</p>
+
+<h4 class="xh4">Two — the meaning</h4>
+<p>A model called <b>bge-m3</b> reads a card and turns it into <b>1,024 numbers</b> — the card's position in an imaginary space with 1,024 directions. The model was trained so that <b>passages meaning similar things land near each other</b>, with no words in common required.</p>
+<p>Your question becomes 1,024 numbers the same way, and finding relevant cards is simply: which positions sit closest? That is why the working-capital passage answers the merchants question.</p>
+<p class="note">Because bge-m3 was trained on many languages at once, a Spanish document lands near an English question about the same thing. Ask in Spanish, get the Spanish documents — no translation step anywhere.</p>
+
+<div class="does"><code>/brain-setup</code><span>Downloads the model that does the converting. Until it has run, this second way is unavailable and the brain says so.</span></div>
+<div class="does"><code>/brain-index</code><span>Computes the 1,024 numbers for every new or changed card — the slow part of a first index.</span></div>
+
+<h4 class="xh4">Three — the connections</h4>
+<p>The third way ignores your question's words <em>and</em> its meaning. It looks at what your documents are about and how those things relate: a network of <b>entities</b> — companies, people, products, decisions — joined by the relationships your notes state.</p>
+<p>This catches what the other two structurally cannot. One passage says "the regulatory application"; another says "the consultant's day rate". Nothing links them by words or meaning. The network knows both attach to the same pilot.</p>
+
+<div class="does"><code>/brain-enrich</code><span>Builds this network. Without it the brain still answers using the first two ways — you just lose the third.</span></div>
+<div class="does"><code>entity</code><span>Queries the network directly. Use it when your question names one thing.</span></div>
+
+<h3 class="xh">Step 3 · Combining three answers into one</h3>
+<p>Three methods produce three ranked lists whose scores are in unrelated units — 14.2, 0.81, 0.06. Averaging them is meaningless.</p>
+<p>So the scores are thrown away and only the <b>rankings</b> vote. This is <b>reciprocal rank fusion</b>, and it behaves like a ranked-choice election: each method votes for a card with strength <code>1 / (60 + rank)</code>. A card ranked well by <em>two</em> methods beats a card ranked first by only one — which is right, because agreement between independent methods is stronger evidence than one method's enthusiasm.</p>
+
+<figure>
+<svg viewBox="0 0 700 290" role="img" aria-label="Three ranked lists are fused by reciprocal rank fusion, then reranked by graph spread, source trust and freshness, producing cited passages.">
+  <defs><marker id="xb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+  <text x="0" y="12" font-size="11" fill="currentColor" opacity=".6">your question</text>
+  <rect x="0" y="24" width="146" height="56" fill="none" stroke="currentColor" opacity=".5" rx="2"/>
+  <text x="12" y="44" font-size="11.5" fill="currentColor">exact words</text>
+  <text x="12" y="61" font-size="10" fill="currentColor" opacity=".55">BM25 · rare words</text>
+  <text x="12" y="74" font-size="10" fill="currentColor" opacity=".55">count for more</text>
+  <rect x="0" y="94" width="146" height="56" fill="none" stroke="currentColor" opacity=".5" rx="2"/>
+  <text x="12" y="114" font-size="11.5" fill="currentColor">meaning</text>
+  <text x="12" y="131" font-size="10" fill="currentColor" opacity=".55">1,024 numbers</text>
+  <text x="12" y="144" font-size="10" fill="currentColor" opacity=".55">per card</text>
+  <rect x="0" y="164" width="146" height="56" fill="none" stroke="currentColor" opacity=".5" rx="2"/>
+  <text x="12" y="184" font-size="11.5" fill="currentColor">connections</text>
+  <text x="12" y="201" font-size="10" fill="currentColor" opacity=".55">entities named</text>
+  <text x="12" y="214" font-size="10" fill="currentColor" opacity=".55">in the question</text>
+  <line x1="154" y1="52" x2="204" y2="110" stroke="currentColor" stroke-width="1.2" opacity=".6" marker-end="url(#xb)"/>
+  <line x1="154" y1="122" x2="204" y2="122" stroke="currentColor" stroke-width="1.2" opacity=".6" marker-end="url(#xb)"/>
+  <line x1="154" y1="192" x2="204" y2="134" stroke="currentColor" stroke-width="1.2" opacity=".6" marker-end="url(#xb)"/>
+  <rect x="212" y="94" width="156" height="56" style="fill:var(--accent);fill-opacity:.12;stroke:var(--accent)" stroke-width="1.4" rx="2"/>
+  <text x="224" y="115" font-size="11.5" style="fill:var(--accent)">rank fusion</text>
+  <text x="224" y="132" font-size="10" fill="currentColor" opacity=".65">each list votes</text>
+  <text x="224" y="145" font-size="10" fill="currentColor" opacity=".65">1 / (60 + rank)</text>
+  <line x1="376" y1="122" x2="418" y2="122" stroke="currentColor" stroke-width="1.2" opacity=".6" marker-end="url(#xb)"/>
+  <rect x="426" y="84" width="166" height="76" fill="none" stroke="currentColor" opacity=".5" rx="2"/>
+  <text x="438" y="104" font-size="11.5" fill="currentColor">rerank</text>
+  <text x="438" y="121" font-size="10" fill="currentColor" opacity=".6">55% fused vote</text>
+  <text x="438" y="134" font-size="10" fill="currentColor" opacity=".6">25% graph spread</text>
+  <text x="438" y="147" font-size="10" fill="currentColor" opacity=".6">10% trust · 10% age</text>
+  <line x1="600" y1="122" x2="634" y2="122" style="stroke:var(--accent);color:var(--accent)" stroke-width="1.5" marker-end="url(#xb)"/>
+  <text x="642" y="112" font-size="11" style="fill:var(--accent)">cited</text>
+  <text x="642" y="126" font-size="11" style="fill:var(--accent)">passages</text>
+  <text x="642" y="142" font-size="9.5" fill="currentColor" opacity=".55">path:line</text>
+  <text x="212" y="186" font-size="10" fill="currentColor" opacity=".5">scores are ignored — only</text>
+  <text x="212" y="200" font-size="10" fill="currentColor" opacity=".5">positions count, so three</text>
+  <text x="212" y="214" font-size="10" fill="currentColor" opacity=".5">unlike units can vote</text>
+  <text x="426" y="186" font-size="10" fill="currentColor" opacity=".5">a draft scores down; a</text>
+  <text x="426" y="200" font-size="10" fill="currentColor" opacity=".5">superseded document is</text>
+  <text x="426" y="214" font-size="10" fill="currentColor" opacity=".5">nearly halved</text>
+</svg>
+<figcaption>Voting by rank rather than score is what lets three incompatible units be combined at all. The rerank then adjusts for what search cannot see: connectedness, trust and age.</figcaption>
+</figure>
+
+<p>Roughly <b>55%</b> the fused vote, <b>25%</b> how brightly the graph lights the card, <b>10%</b> how much you trust its source, <b>10%</b> how recent it is. Superseded documents lose more than half their score, and no document may take more than two slots — so you get a spread of evidence, not one file five times.</p>
+
+<div class="does"><code>/brain-ask</code><span>Runs this entire pipeline and answers with the passages it ends up with.</span></div>
+<div class="does"><code>/brain-source</code><span>Sets the trust weight in that 10% slice. Your anchor repository sits at 1.0; sources added later normally sit below it.</span></div>
+
+<h3 class="xh">Step 4 · How the graph moves an answer</h3>
+<p>Picture the entities and cards as dots joined by lines. Your question drops light on the dots it obviously touches — the cards the first two searches liked, plus any entity you named. That light then <b>spreads outward along the connections</b>, dimmer at each hop, for seven rounds.</p>
+<p>Cards in a well-lit neighbourhood score higher even though your words never appear in them. This is <b>personalised PageRank</b> — the idea that ranked the early web, except the starting light is placed by your question rather than spread evenly.</p>
+
+<figure>
+<svg viewBox="0 0 700 200" role="img" aria-label="Light placed on a seed node spreads outward through the graph, dimming each hop, lifting passages the question never mentioned.">
+  <g stroke="currentColor" opacity=".28">
+    <line x1="110" y1="100" x2="240" y2="52"/><line x1="110" y1="100" x2="240" y2="148"/>
+    <line x1="240" y1="52" x2="370" y2="40"/><line x1="240" y1="52" x2="370" y2="100"/>
+    <line x1="240" y1="148" x2="370" y2="100"/><line x1="240" y1="148" x2="370" y2="164"/>
+    <line x1="370" y1="40" x2="496" y2="64"/><line x1="370" y1="100" x2="496" y2="64"/>
+    <line x1="370" y1="100" x2="496" y2="138"/><line x1="370" y1="164" x2="496" y2="138"/>
+    <line x1="496" y1="64" x2="602" y2="100"/><line x1="496" y1="138" x2="602" y2="100"/>
+  </g>
+  <circle cx="110" cy="100" r="15" style="fill:var(--accent);fill-opacity:.95"/>
+  <circle cx="240" cy="52" r="12" style="fill:var(--accent);fill-opacity:.55"/>
+  <circle cx="240" cy="148" r="12" style="fill:var(--accent);fill-opacity:.55"/>
+  <circle cx="370" cy="40" r="10" style="fill:var(--accent);fill-opacity:.3"/>
+  <circle cx="370" cy="100" r="10" style="fill:var(--accent);fill-opacity:.3"/>
+  <circle cx="370" cy="164" r="10" style="fill:var(--accent);fill-opacity:.3"/>
+  <circle cx="496" cy="64" r="9" fill="currentColor" fill-opacity=".16"/>
+  <circle cx="496" cy="138" r="9" fill="currentColor" fill-opacity=".16"/>
+  <circle cx="602" cy="100" r="8" fill="currentColor" fill-opacity=".09"/>
+  <text x="110" y="136" font-size="10.5" style="fill:var(--accent)" text-anchor="middle">seed</text>
+  <text x="110" y="150" font-size="9.5" fill="currentColor" text-anchor="middle" opacity=".55">your question</text>
+  <text x="240" y="22" font-size="9.5" fill="currentColor" text-anchor="middle" opacity=".55">1 hop</text>
+  <text x="370" y="192" font-size="9.5" fill="currentColor" text-anchor="middle" opacity=".55">2 hops</text>
+  <text x="602" y="128" font-size="9.5" fill="currentColor" text-anchor="middle" opacity=".5">too far</text>
+</svg>
+<figcaption>Light starts on what the question touches and dims with distance. Passages two steps away still get a lift — found through what they connect to, not what they say.</figcaption>
+</figure>
+
+<div class="does"><code>/brain-view</code><span>The Graph tab above draws this network — nodes sized by how often they appear, click one to isolate its neighbourhood.</span></div>
+
+<h3 class="xh">Where the network comes from</h3>
+<p>Something has to read the cards and write down what is in them. Batches are handed to Claude with a strict instruction: list the entities this passage <em>actually names</em> and the relationships it <em>actually states</em> — invent nothing, bring in nothing from outside.</p>
+<p>Two choices make this practical. It runs as subagents <b>in your own session</b>, so it costs time and context rather than money. And every card is tracked by a <b>fingerprint of its text</b>, so a card that has not changed is never re-read — stop the job halfway and nothing is lost or repeated.</p>
+<p>Extraction names things as the text spells them, so one company can arrive as several entries — an abbreviation and its expansion, a name and a transcript's misspelling. A later pass folds those together, but only when <b>two independent extractions each called the other an alias</b>. That conservative rule is what stops a product being swallowed by the company it is named after.</p>
+
+<div class="does"><code>/brain-enrich</code><span>Runs the extraction batch by batch. Safe to stop and resume.</span></div>
+<div class="does"><code>merge_entities</code><span>Runs the folding pass. Ask for the plan first — it shows exactly what it proposes to merge.</span></div>
+
+<h3 class="xh">The layer above · answers no passage contains</h3>
+<p>Ask "what are our recurring risks?" and there is no card to find. The answer is spread across dozens.</p>
+<p>So an algorithm called <b>Leiden</b> looks at the entity network and finds its <b>communities</b> — clusters that connect to each other far more than to everything else, the way friend groups emerge in a social network without anyone labelling them. Each cluster is summarised, and those summaries become searchable objects that still point back to the real files.</p>
+
+<div class="does"><code>/brain-enrich --communities</code><span>Finds the clusters and writes the summaries. Needs the entity network first.</span></div>
+<div class="does"><code>search_themes</code><span>Ranks those summaries instead of passages — for when no single document holds the answer.</span></div>
+
+<h3 class="xh">Why it stays fast</h3>
+<p>Everything expensive — turning a card into 1,024 numbers, having Claude read it — is stored against a <b>fingerprint of that card's exact text</b>. Re-indexing compares fingerprints and skips whatever has not moved. Edit one paragraph and only the cards that actually changed are recomputed.</p>
+<p>A first full index of a few hundred thousand words takes tens of minutes. Every index after that takes seconds.</p>
+
+<div class="does"><code>/brain-index</code><span>Cheap to run often. When files move ahead of the index, the health strip at the top of this page says so.</span></div>
+
+<h3 class="xh">The other direction · putting knowledge back</h3>
+<p>Tell the brain something worth keeping and it writes a real markdown file into your repository — dated, titled, tagged, with a confidence level and links to entities it recognises — then indexes it immediately.</p>
+<p>That direction matters more than it sounds. <b>Your markdown is the truth; the index is disposable.</b> Delete the whole database and you lose an afternoon of recomputation, never any knowledge.</p>
+
+<div class="does"><code>/brain-add</code><span>Writes the note and indexes it, so the very next search finds it.</span></div>
+<div class="does"><code>/brain-dream</code><span>Reports contradictions, ageing facts and orphans across what you have written. It reports; it never edits.</span></div>
+
+<h3 class="xh">Every command, and the part it drives</h3>
+<p>Read top to bottom, this is also the order you run them in.</p>
+<div class="xscroll">
+<table class="xtable">
+<thead><tr><th>Command</th><th>The concept it drives</th></tr></thead>
+<tbody>
+<tr><td>/brain-setup</td><td>Fetches the model that turns a card into 1,024 numbers. Without it the <b>meaning</b> search is unavailable.</td></tr>
+<tr><td>/brain-source</td><td>Chooses which repositories become cards, and sets each one's <b>trust weight</b>.</td></tr>
+<tr><td>/brain-index</td><td>Cuts documents into <b>cards</b>, builds the <b>exact-word index</b>, and embeds whatever's <b>fingerprint</b> changed.</td></tr>
+<tr><td>/brain-enrich</td><td>Reads the cards to build the <b>entity network</b>.</td></tr>
+<tr><td>/brain-enrich --communities</td><td>Clusters that network and writes a <b>summary per cluster</b>.</td></tr>
+<tr><td>/brain-ask</td><td>Runs all three searches, the <b>rank-fusion vote</b> and the rerank.</td></tr>
+<tr><td>entity</td><td>Queries the <b>network</b> directly when your question names one thing.</td></tr>
+<tr><td>search_themes</td><td>Ranks the <b>cluster summaries</b> instead of passages.</td></tr>
+<tr><td>/brain-add</td><td>Writes new knowledge back as <b>markdown</b>.</td></tr>
+<tr><td>/brain-dream</td><td>Reports contradictions, ageing facts and orphans.</td></tr>
+<tr><td>/brain-view</td><td>Opens this dashboard.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">Only the first four are needed before the brain is useful. <code>/brain-setup</code> and <code>/brain-index</code> alone give you two of the three searches; everything after adds the graph and the layer above it.</p>
+
+</article>

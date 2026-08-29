@@ -8,7 +8,11 @@ const TAB_HINTS = {
     "often they appear across your documents.",
   corpus: "Every document, grouped by source and folder, sized by length. " +
     "Faded documents have no entities yet.",
+  howitworks: "What the brain actually does with your markdown, and which " +
+    "command drives each part.",
 };
+
+const TABS = ["communities", "graph", "corpus", "howitworks"];
 
 const Brain = {
   state: {},
@@ -37,9 +41,13 @@ const Brain = {
   showTab(name) {
     document.querySelectorAll(".tabs button").forEach((button) =>
       button.classList.toggle("active", button.dataset.tab === name));
-    ["communities", "graph", "corpus"].forEach((tab) => {
+    TABS.forEach((tab) => {
       document.getElementById("tab-" + tab).hidden = tab !== name;
     });
+    // Long-form reading needs the full width; the suggestions panel would
+    // squeeze it to about half a column.
+    const main = document.querySelector("main");
+    if (main) main.classList.toggle("reading", name === "howitworks");
     const hint = document.getElementById("tab-hint");
     if (hint) hint.textContent = TAB_HINTS[name] || "";
     if (Brain.render[name]) Brain.render[name]();
@@ -567,3 +575,20 @@ Brain.render.corpus = async function () {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { graphTick, GRAPH_PHYSICS };
 }
+
+
+// Static, bundled prose — not user data, so injecting it as markup is safe.
+// Everything sourced from the index still goes through Brain.el/textContent.
+Brain.render.howitworks = async function () {
+  const target = document.getElementById("tab-howitworks");
+  if (target.dataset.loaded) return;
+  target.dataset.loaded = "1";
+  try {
+    const response = await fetch("/explainer.html");
+    if (!response.ok) throw new Error(String(response.status));
+    target.innerHTML = await response.text();
+  } catch (error) {
+    target.dataset.loaded = "";
+    Brain.empty(target, "Could not load the explainer (" + error.message + ").");
+  }
+};

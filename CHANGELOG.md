@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- **New dashboard tab: How it works.** A plain-language explanation of the
+  mechanics — chunking, embeddings, rank fusion, graph propagation and
+  community summaries — with the command that drives each part, and diagrams
+  for the parts prose handles badly. Bundled and offline like the rest of the
+  page.
+
 ## 0.1.0
 
 First release.

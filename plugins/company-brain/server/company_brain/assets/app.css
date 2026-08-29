@@ -62,3 +62,39 @@ canvas{width:100%;height:560px;border:1px solid var(--rule);background:var(--sur
 .leaf.bare{opacity:.4;border-style:dashed}
 .group{margin-bottom:18px}
 .group h3{margin:0 0 6px;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--soft)}
+
+/* ---- reading mode: the explainer tab needs the full width ---------------- */
+main.reading{grid-template-columns:minmax(0,1fr)}
+main.reading #panel{display:none}
+
+/* ---- explainer ---------------------------------------------------------- */
+.explain{max-width:70ch;line-height:1.65;padding-bottom:40px}
+.explain .lede{font-size:1.06rem;color:var(--soft);margin:4px 0 30px;max-width:60ch}
+.explain p{margin:0 0 14px}
+.explain b{font-weight:600;color:var(--ink)}
+.explain em{font-style:italic}
+.explain code{font-family:var(--mono);font-size:.85em;background:var(--surface);
+  border:1px solid var(--rule);border-radius:2px;padding:.05em .32em}
+.xh{font-size:1.18rem;letter-spacing:-.01em;margin:38px 0 10px;padding-top:14px;
+  border-top:1px solid var(--rule)}
+.xh4{font-size:.95rem;margin:24px 0 6px;color:var(--accent)}
+.explain .note{font-size:.92rem;color:var(--soft);border-left:2px solid var(--rule);
+  padding:2px 0 2px 14px;margin:16px 0}
+.explain figure{margin:22px 0 24px;padding:18px 18px 12px;background:var(--surface);
+  border:1px solid var(--rule);border-radius:3px}
+.explain figure svg{display:block;width:100%;height:auto}
+.explain figcaption{font-size:.82rem;color:var(--soft);margin-top:12px;padding-top:10px;
+  border-top:1px solid var(--rule)}
+.does{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;align-items:baseline;
+  margin:14px 0;padding:10px 0 10px 14px;border-left:2px solid var(--accent)}
+.does code{font-family:var(--mono);font-size:.8rem;font-weight:600;color:var(--accent);
+  background:none;border:0;padding:0;white-space:nowrap}
+.does span{font-size:.92rem;color:var(--soft)}
+.does span b{color:var(--ink)}
+.xscroll{overflow-x:auto;margin:18px 0}
+.xtable{border-collapse:collapse;width:100%;font-size:.88rem}
+.xtable th{text-align:left;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--soft);padding:0 16px 7px 0;border-bottom:1px solid var(--ink);white-space:nowrap}
+.xtable td{padding:9px 16px 9px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.xtable td:first-child{font-family:var(--mono);font-size:.82rem;color:var(--accent);white-space:nowrap}
+@media (max-width:560px){.does{grid-template-columns:1fr;gap:2px}}
