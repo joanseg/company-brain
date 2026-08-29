@@ -73,6 +73,11 @@ The graph is the part that earns its keep: it knows two passages concern the
 same project when they share no vocabulary at all — which is exactly what
 similarity search cannot see.
 
+**The full explanation** — chunking, BM25, embeddings, rank fusion, PageRank,
+Leiden communities, and which command drives each part — is in
+[the plugin README](plugins/company-brain/README.md#how-it-works), and in the
+dashboard's **How it works** tab.
+
 Everything expensive is keyed by content hash, so re-indexing only touches what
 actually changed. Editing one file costs seconds, not a rebuild.
 
@@ -149,8 +154,12 @@ no system Python needed. Developed on macOS with Apple Silicon.
 ## Updating
 
 ```bash
-claude plugin update company-brain
+claude plugin update company-brain@company-brain
 ```
+
+Use the qualified `<plugin>@<marketplace>` name — the bare name does not
+resolve. If you installed into a single repository rather than your user
+account, add `--scope project`.
 
 That pulls the latest release whenever a new tag is pushed. Restart Claude Code
 to apply it — MCP servers only load at session start.
