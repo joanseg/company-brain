@@ -1,6 +1,6 @@
 {
   "name": "company-brain",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "Company Brain",
   "description": "GraphRAG company brain over your markdown repos: hybrid lexical + semantic + graph retrieval with citations, and a capture path for new knowledge.",
   "license": "MIT",

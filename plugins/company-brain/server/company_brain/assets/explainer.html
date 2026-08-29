@@ -1,206 +1,549 @@
 <article class="explain">
 
-<p class="lede">The brain reads your markdown and answers questions about it, citing the exact line. Here is what happens in between, and which command drives each part.</p>
+<p class="lede">The brain reads the markdown you already have and answers questions about it, quoting the file and line. Here is everything that happens in between — and which command drives each part.</p>
 
-<h3 class="xh">Why searching for words isn't enough</h3>
-<p>Ask <em>"how do merchants get their money faster?"</em> when the document that answers it says <em>"settlement latency compresses working capital"</em> — not one word matches, and ordinary search finds nothing. Search a common word instead and you get four hundred hits. Too few, then too many.</p>
-<p>The brain solves both by never relying on one method. It looks for your question in <b>three completely different ways at once</b>, then combines the answers.</p>
+<nav class="xtoc" aria-label="Contents">
+  <a href="#x-idea"><span class="n">00</span><span>The problem it solves</span></a>
+  <a href="#x-shape"><span class="n">01</span><span>What lives where</span></a>
+  <a href="#x-setup"><span class="n">02</span><span>Two Python environments</span></a>
+  <a href="#x-index"><span class="n">03</span><span>Cutting documents into cards</span></a>
+  <a href="#x-three"><span class="n">04</span><span>Three ways to find a card</span></a>
+  <a href="#x-entities"><span class="n">05</span><span>Teaching it who's who</span></a>
+  <a href="#x-merge"><span class="n">06</span><span>Folding duplicates together</span></a>
+  <a href="#x-comm"><span class="n">07</span><span>Clusters and their summaries</span></a>
+  <a href="#x-ask"><span class="n">08</span><span>Answering a question</span></a>
+  <a href="#x-themes"><span class="n">09</span><span>Questions no passage answers</span></a>
+  <a href="#x-capture"><span class="n">10</span><span>Putting knowledge back in</span></a>
+  <a href="#x-upkeep"><span class="n">11</span><span>Keeping it honest</span></a>
+  <a href="#x-plumb"><span class="n">12</span><span>The wiring underneath</span></a>
+  <a href="#x-map"><span class="n">13</span><span>Every command, mapped</span></a>
+  <a href="#x-numbers"><span class="n">14</span><span>Every number, and its file</span></a>
+  <a href="#x-gloss"><span class="n">15</span><span>Glossary</span></a>
+</nav>
 
-<h3 class="xh">Step 1 · Documents become index cards</h3>
-<p>A whole document is the wrong unit. A 12,000-word paper might answer your question in one paragraph; return the file and you've handed someone a haystack.</p>
-<p>So each document is cut into <b>chunks</b> of about 240 words — index cards. Every card remembers its document, the heading it sat under, and the line it starts at. That is how a citation like <code>strategy/uk.md:365</code> is possible at all.</p>
-<p>Cards are cut at <b>heading boundaries</b> first, so one never straddles two unrelated sections, and consecutive cards <b>overlap by 36 words</b>, so a sentence falling on a cut still survives whole on one side of it.</p>
+<section id="x-idea">
+  <div class="rail"><span class="num">00</span><span class="rnote">No command — the idea behind all of them.</span></div>
+  <div class="xbody">
+    <h3 class="xh">The problem it solves</h3>
+    <p>Suppose you ask: <em>“how do merchants get their money faster?”</em> The document that answers it says <em>“settlement latency compresses working capital.”</em> Not one word overlaps. Ordinary text search finds nothing.</p>
+    <p>Now search for a common word instead — <code>payments</code> — and you get four hundred hits, in no useful order. Too few results, then too many. That is the whole difficulty in one pair of examples.</p>
+    <p>The brain never trusts one method. It looks for your question in <strong>three completely different ways at the same time</strong>, then merges the three opinions into one ranking. Where one method is blind, another usually is not.</p>
+    <p>Everything else here is either <em>preparing</em> for that moment — indexing, embedding, graph building — or <em>reacting</em> to it: writing new notes back, checking the index has not gone stale.</p>
+  </div>
+</section>
 
-<figure>
-<svg viewBox="0 0 700 190" role="img" aria-label="A document is cut into overlapping chunks at heading boundaries, each keeping its path, heading and line number.">
-  <defs><marker id="xa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
-  <text x="0" y="12" font-size="11" fill="currentColor" opacity=".6">uk-market.md</text>
-  <rect x="0" y="22" width="140" height="146" fill="none" stroke="currentColor" opacity=".4" rx="2"/>
-  <line x1="12" y1="44" x2="98" y2="44" stroke="currentColor" stroke-width="3" opacity=".75"/>
-  <line x1="12" y1="60" x2="128" y2="60" stroke="currentColor" opacity=".3"/>
-  <line x1="12" y1="72" x2="128" y2="72" stroke="currentColor" opacity=".3"/>
-  <line x1="12" y1="84" x2="112" y2="84" stroke="currentColor" opacity=".3"/>
-  <line x1="12" y1="106" x2="84" y2="106" stroke="currentColor" stroke-width="3" opacity=".75"/>
-  <line x1="12" y1="122" x2="128" y2="122" stroke="currentColor" opacity=".3"/>
-  <line x1="12" y1="134" x2="128" y2="134" stroke="currentColor" opacity=".3"/>
-  <line x1="12" y1="146" x2="104" y2="146" stroke="currentColor" opacity=".3"/>
-  <line x1="156" y1="95" x2="198" y2="95" stroke="currentColor" stroke-width="1.4" marker-end="url(#xa)"/>
-  <text x="177" y="85" font-size="10" fill="currentColor" text-anchor="middle" opacity=".6">cut</text>
-  <rect x="216" y="28" width="196" height="58" fill="none" stroke="currentColor" opacity=".65" rx="2"/>
-  <text x="228" y="47" font-size="11" fill="currentColor">chunk 1 · ~240 words</text>
-  <text x="228" y="64" font-size="10" fill="currentColor" opacity=".55">heading: 5. Sterling</text>
-  <text x="228" y="77" font-size="10" fill="currentColor" opacity=".55">line 341</text>
-  <rect x="216" y="102" width="196" height="58" fill="none" stroke="currentColor" opacity=".65" rx="2"/>
-  <text x="228" y="121" font-size="11" fill="currentColor">chunk 2 · ~240 words</text>
-  <text x="228" y="138" font-size="10" fill="currentColor" opacity=".55">heading: 5.1 tGBP</text>
-  <text x="228" y="151" font-size="10" fill="currentColor" opacity=".55">line 365</text>
-  <rect x="222" y="83" width="184" height="24" style="fill:var(--accent);opacity:.18"/>
-  <line x1="430" y1="95" x2="462" y2="95" style="stroke:var(--accent);color:var(--accent)" stroke-width="1.4" marker-end="url(#xa)"/>
-  <text x="474" y="91" font-size="11" style="fill:var(--accent)">36-word overlap</text>
-  <text x="474" y="106" font-size="10" fill="currentColor" opacity=".55">a sentence on the seam</text>
-  <text x="474" y="119" font-size="10" fill="currentColor" opacity=".55">survives intact</text>
-</svg>
-<figcaption>Cutting happens at headings, so a card is always about one thing. The shaded band is the overlap.</figcaption>
-</figure>
+<section id="x-shape">
+  <div class="rail"><span class="num">01</span><span class="rnote">Applies to every command below.</span></div>
+  <div class="xbody">
+    <h3 class="xh">What lives where</h3>
+    <p>One rule governs the whole design: <strong>your markdown is the truth; everything the plugin builds is a disposable copy.</strong> Delete the working folder and you lose an afternoon of re-indexing — never a fact.</p>
+    <pre><b>your-repo/</b>                      <span class="c">← the anchor: where you installed it.</span>
+│                               <span class="c">Trust weight 1.0.</span>
+├── docs/ notes/ memory/ …      <span class="c">your markdown — the source of truth</span>
+└── <b>.company-brain/</b>             <span class="c">everything derived, gitignored.</span>
+    │                           <span class="c">The only folder the plugin creates.</span>
+    ├── brain.db                <span class="c">one SQLite file holding every source:</span>
+    │                           <span class="c">text, keywords, vectors, entities,</span>
+    │                           <span class="c">relations, clusters</span>
+    ├── sources.json            <span class="c">the roots below, and their weights</span>
+    │                           <span class="c">← the one file worth keeping</span>
+    └── .indexed                <span class="c">an empty marker file, timestamped</span>
 
-<div class="does"><code>/brain-index</code><span>Does the cutting — walks every connected repository and rebuilds the cards for anything whose text changed.</span></div>
-<div class="does"><code>/brain-source</code><span>Decides <b>which</b> repositories get walked.</span></div>
+<b>~/code/handbook/</b>                <span class="c">← added with /brain-source, weight 0.8</span>
+└── **/*.md                     <span class="c">read where it lies. Nothing is written here.</span>
 
-<h3 class="xh">Step 2 · Three ways to find a card</h3>
+<b>~/work/org-intel/content/</b>       <span class="c">← a subfolder is a valid root too</span>
+└── **/*.md                     <span class="c">read where it lies. Nothing is written here.</span></pre>
+    <p>A single SQLite file holds everything: the chunks of text, the keyword index, the numeric vectors, the entity graph, the clusters. SQLite is just a database that is one ordinary file on disk — no server, no account, nothing running in the background.</p>
+    <p><strong>Every repository you add lands in that same file.</strong> There is one index, one graph and one set of clusters, no matter how many sources feed them — which is what lets an answer cite your handbook and your meeting notes in the same breath. The extra repositories are read <em>where they lie</em>: an absolute path recorded in <code>sources.json</code>, walked on each index, never copied and never modified. A source root does not have to be a whole repository either; pointing at one folder inside a large one is normal.</p>
+    <p><code>sources.json</code> is the exception to “disposable”. Its <strong>trust weight</strong> per source feeds directly into ranking — the anchor sits at <code>1.0</code>, anything added later normally lower, so a less-trusted source has to be a distinctly better match to outrank a curated one.</p>
+    <div class="xaside"><strong>Why this matters for the commands.</strong> <span class="chip">/brain-index</span> and <span class="chip">/brain-enrich</span> only ever write inside <code>.company-brain/</code>. The single command that writes real markdown is <span class="chip">/brain-add</span>, and it writes into <strong>the anchor</strong>. Adding a second repository does not make it a place notes get filed: capturing into one refuses to run unless you name the destination folder explicitly, because guessing a spot inside somebody else's corpus is exactly the wrong default.</div>
+  </div>
+</section>
 
-<h4 class="xh4">One — the exact words</h4>
-<p>Which cards literally contain your words? This uses <b>BM25</b>, a fifty-year-old scoring rule that is still excellent. Two ideas do the work: more mentions beat fewer, and a <b>rare word counts for far more than a common one</b>. Matching a company's registered name is strong evidence; matching "the" is none.</p>
-<p>Unbeatable for names, codes and exact phrases. Useless for a paraphrase.</p>
+<section id="x-setup">
+  <div class="rail"><span class="num">02</span><span class="chip">/brain-setup</span><span class="rnote">Once, ever. Downloads about 2&nbsp;GB.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Two Python environments, on purpose</h3>
+    <p>The plugin installs <strong>two separate Python environments</strong> rather than one, and the reason is speed.</p>
+    <ul>
+      <li><strong>The server environment</strong> is tiny — a database driver, some maths, a graph library. It starts instantly, and it starts every time you open Claude Code.</li>
+      <li><strong>The embedding environment</strong> is enormous — PyTorch and a multilingual model called <code>bge-m3</code>, roughly 2&nbsp;GB. Loading it takes seconds.</li>
+    </ul>
+    <p>If they were one environment, every session would pay those seconds. Instead the heavy one runs as a <strong>separate long-lived process</strong> that the server talks to over its input and output streams, one line of JSON at a time: <em>here are some sentences</em> → <em>here are their vectors</em>. The model loads once and stays warm.</p>
+    <p>This split has a useful consequence: if the embedding environment was never built or its download failed, <strong>nothing crashes</strong>. Search still runs on the other two signals and simply reports that the meaning-based one is unavailable.</p>
+    <p>The command builds the light environment, builds the heavy one, then sends it one throwaway sentence so the model downloads and warms up now rather than during your first real question. It reports the model name, the device it picked (Apple <code>mps</code>, Nvidia <code>cuda</code>, or plain <code>cpu</code>) and the vector size.</p>
+  </div>
+</section>
 
-<h4 class="xh4">Two — the meaning</h4>
-<p>A model called <b>bge-m3</b> reads a card and turns it into <b>1,024 numbers</b> — the card's position in an imaginary space with 1,024 directions. The model was trained so that <b>passages meaning similar things land near each other</b>, with no words in common required.</p>
-<p>Your question becomes 1,024 numbers the same way, and finding relevant cards is simply: which positions sit closest? That is why the working-capital passage answers the merchants question.</p>
-<p class="note">Because bge-m3 was trained on many languages at once, a Spanish document lands near an English question about the same thing. Ask in Spanish, get the Spanish documents — no translation step anywhere.</p>
+<section id="x-index">
+  <div class="rail"><span class="num">03</span><span class="chip">/brain-index</span><span class="chip tool">reindex</span><span class="rnote">Seconds after the first run.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Cutting documents into index cards</h3>
+    <p>A whole document is the wrong unit to retrieve. A 12,000-word strategy paper might answer your question in one paragraph; hand back the file and you have handed someone a haystack.</p>
+    <p>So each document is cut into <strong>chunks</strong> of about <strong>240 words</strong> — think index cards. Every card remembers three things: which file it came from, the heading it sat under, and <strong>the line number it starts at</strong>. That last one is why a citation like <code>strategy/uk.md:365</code> is possible at all.</p>
 
-<div class="does"><code>/brain-setup</code><span>Downloads the model that does the converting. Until it has run, this second way is unavailable and the brain says so.</span></div>
-<div class="does"><code>/brain-index</code><span>Computes the 1,024 numbers for every new or changed card — the slow part of a first index.</span></div>
+    <figure>
+      <div class="drawn scrollx">
+        <svg viewBox="0 0 720 210" role="img" aria-label="A document is cut at heading boundaries first, then packed into 240-word cards that overlap their neighbours by 36 words; each card records the line it starts at.">
+          <text x="0" y="14" font-size="10.5" letter-spacing="1.4" style="fill:var(--x-dim)">THE DOCUMENT</text>
+          <rect x="0" y="24" width="720" height="26" style="fill:var(--x-sunk)"/>
+          <line x1="252" y1="18" x2="252" y2="56" style="stroke:var(--ink);stroke-width:2"/>
+          <line x1="516" y1="18" x2="516" y2="56" style="stroke:var(--ink);stroke-width:2"/>
+          <text x="6" y="41" font-size="11" style="fill:var(--soft)"># Settlement</text>
+          <text x="258" y="41" font-size="11" style="fill:var(--soft)">## Working capital</text>
+          <text x="522" y="41" font-size="11" style="fill:var(--soft)">## Risks</text>
 
-<h4 class="xh4">Three — the connections</h4>
-<p>The third way ignores your question's words <em>and</em> its meaning. It looks at what your documents are about and how those things relate: a network of <b>entities</b> — companies, people, products, decisions — joined by the relationships your notes state.</p>
-<p>This catches what the other two structurally cannot. One passage says "the regulatory application"; another says "the consultant's day rate". Nothing links them by words or meaning. The network knows both attach to the same pilot.</p>
+          <line x1="252" y1="56" x2="252" y2="196" style="stroke:var(--rule);stroke-width:1;stroke-dasharray:3 3"/>
+          <line x1="516" y1="56" x2="516" y2="196" style="stroke:var(--rule);stroke-width:1;stroke-dasharray:3 3"/>
 
-<div class="does"><code>/brain-enrich</code><span>Builds this network. Without it the brain still answers using the first two ways — you just lose the third.</span></div>
-<div class="does"><code>entity</code><span>Queries the network directly. Use it when your question names one thing.</span></div>
+          <text x="0" y="86" font-size="10.5" letter-spacing="1.4" style="fill:var(--x-dim)">CARDS</text>
+          <rect x="0" y="96" width="140" height="34" rx="2" style="fill:var(--x-tint-acc);stroke:var(--accent);stroke-width:1"/>
+          <rect x="112" y="96" width="28" height="34" style="fill:var(--accent);opacity:.3"/>
+          <rect x="112" y="96" width="140" height="34" rx="2" style="fill:var(--x-tint-acc);stroke:var(--accent);stroke-width:1"/>
+          <rect x="264" y="96" width="140" height="34" rx="2" style="fill:var(--x-tint-acc);stroke:var(--accent);stroke-width:1"/>
+          <rect x="376" y="96" width="28" height="34" style="fill:var(--accent);opacity:.3"/>
+          <rect x="376" y="96" width="140" height="34" rx="2" style="fill:var(--x-tint-acc);stroke:var(--accent);stroke-width:1"/>
+          <rect x="528" y="96" width="140" height="34" rx="2" style="fill:var(--x-tint-acc);stroke:var(--accent);stroke-width:1"/>
 
-<h3 class="xh">Step 3 · Combining three answers into one</h3>
-<p>Three methods produce three ranked lists whose scores are in unrelated units — 14.2, 0.81, 0.06. Averaging them is meaningless.</p>
-<p>So the scores are thrown away and only the <b>rankings</b> vote. This is <b>reciprocal rank fusion</b>, and it behaves like a ranked-choice election: each method votes for a card with strength <code>1 / (60 + rank)</code>. A card ranked well by <em>two</em> methods beats a card ranked first by only one — which is right, because agreement between independent methods is stronger evidence than one method's enthusiasm.</p>
+          <text x="10" y="118" font-size="11" style="fill:var(--ink)">card 1</text>
+          <text x="122" y="118" font-size="11" style="fill:var(--ink)">card 2</text>
+          <text x="274" y="118" font-size="11" style="fill:var(--ink)">card 3</text>
+          <text x="386" y="118" font-size="11" style="fill:var(--ink)">card 4</text>
+          <text x="538" y="118" font-size="11" style="fill:var(--ink)">card 5</text>
 
-<figure>
-<svg viewBox="0 0 700 290" role="img" aria-label="Three ranked lists are fused by reciprocal rank fusion, then reranked by graph spread, source trust and freshness, producing cited passages.">
-  <defs><marker id="xb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
-  <text x="0" y="12" font-size="11" fill="currentColor" opacity=".6">your question</text>
-  <rect x="0" y="24" width="146" height="56" fill="none" stroke="currentColor" opacity=".5" rx="2"/>
-  <text x="12" y="44" font-size="11.5" fill="currentColor">exact words</text>
-  <text x="12" y="61" font-size="10" fill="currentColor" opacity=".55">BM25 · rare words</text>
-  <text x="12" y="74" font-size="10" fill="currentColor" opacity=".55">count for more</text>
-  <rect x="0" y="94" width="146" height="56" fill="none" stroke="currentColor" opacity=".5" rx="2"/>
-  <text x="12" y="114" font-size="11.5" fill="currentColor">meaning</text>
-  <text x="12" y="131" font-size="10" fill="currentColor" opacity=".55">1,024 numbers</text>
-  <text x="12" y="144" font-size="10" fill="currentColor" opacity=".55">per card</text>
-  <rect x="0" y="164" width="146" height="56" fill="none" stroke="currentColor" opacity=".5" rx="2"/>
-  <text x="12" y="184" font-size="11.5" fill="currentColor">connections</text>
-  <text x="12" y="201" font-size="10" fill="currentColor" opacity=".55">entities named</text>
-  <text x="12" y="214" font-size="10" fill="currentColor" opacity=".55">in the question</text>
-  <line x1="154" y1="52" x2="204" y2="110" stroke="currentColor" stroke-width="1.2" opacity=".6" marker-end="url(#xb)"/>
-  <line x1="154" y1="122" x2="204" y2="122" stroke="currentColor" stroke-width="1.2" opacity=".6" marker-end="url(#xb)"/>
-  <line x1="154" y1="192" x2="204" y2="134" stroke="currentColor" stroke-width="1.2" opacity=".6" marker-end="url(#xb)"/>
-  <rect x="212" y="94" width="156" height="56" style="fill:var(--accent);fill-opacity:.12;stroke:var(--accent)" stroke-width="1.4" rx="2"/>
-  <text x="224" y="115" font-size="11.5" style="fill:var(--accent)">rank fusion</text>
-  <text x="224" y="132" font-size="10" fill="currentColor" opacity=".65">each list votes</text>
-  <text x="224" y="145" font-size="10" fill="currentColor" opacity=".65">1 / (60 + rank)</text>
-  <line x1="376" y1="122" x2="418" y2="122" stroke="currentColor" stroke-width="1.2" opacity=".6" marker-end="url(#xb)"/>
-  <rect x="426" y="84" width="166" height="76" fill="none" stroke="currentColor" opacity=".5" rx="2"/>
-  <text x="438" y="104" font-size="11.5" fill="currentColor">rerank</text>
-  <text x="438" y="121" font-size="10" fill="currentColor" opacity=".6">55% fused vote</text>
-  <text x="438" y="134" font-size="10" fill="currentColor" opacity=".6">25% graph spread</text>
-  <text x="438" y="147" font-size="10" fill="currentColor" opacity=".6">10% trust · 10% age</text>
-  <line x1="600" y1="122" x2="634" y2="122" style="stroke:var(--accent);color:var(--accent)" stroke-width="1.5" marker-end="url(#xb)"/>
-  <text x="642" y="112" font-size="11" style="fill:var(--accent)">cited</text>
-  <text x="642" y="126" font-size="11" style="fill:var(--accent)">passages</text>
-  <text x="642" y="142" font-size="9.5" fill="currentColor" opacity=".55">path:line</text>
-  <text x="212" y="186" font-size="10" fill="currentColor" opacity=".5">scores are ignored — only</text>
-  <text x="212" y="200" font-size="10" fill="currentColor" opacity=".5">positions count, so three</text>
-  <text x="212" y="214" font-size="10" fill="currentColor" opacity=".5">unlike units can vote</text>
-  <text x="426" y="186" font-size="10" fill="currentColor" opacity=".5">a draft scores down; a</text>
-  <text x="426" y="200" font-size="10" fill="currentColor" opacity=".5">superseded document is</text>
-  <text x="426" y="214" font-size="10" fill="currentColor" opacity=".5">nearly halved</text>
-</svg>
-<figcaption>Voting by rank rather than score is what lets three incompatible units be combined at all. The rerank then adjusts for what search cannot see: connectedness, trust and age.</figcaption>
-</figure>
+          <text x="0" y="150" font-size="10.5" style="fill:var(--x-dim)">line 12</text>
+          <text x="112" y="150" font-size="10.5" style="fill:var(--x-dim)">line 208</text>
+          <text x="264" y="150" font-size="10.5" style="fill:var(--x-dim)">line 402</text>
+          <text x="376" y="150" font-size="10.5" style="fill:var(--x-dim)">line 590</text>
+          <text x="528" y="150" font-size="10.5" style="fill:var(--x-dim)">line 733</text>
 
-<p>Roughly <b>55%</b> the fused vote, <b>25%</b> how brightly the graph lights the card, <b>10%</b> how much you trust its source, <b>10%</b> how recent it is. Superseded documents lose more than half their score, and no document may take more than two slots — so you get a spread of evidence, not one file five times.</p>
+          <rect x="0" y="172" width="18" height="14" style="fill:var(--accent);opacity:.3"/>
+          <text x="26" y="183" font-size="11" style="fill:var(--soft)">36-word overlap, so a sentence on a seam survives whole on one side</text>
+          <line x1="516" y1="176" x2="516" y2="190" style="stroke:var(--ink);stroke-width:2"/>
+          <text x="526" y="183" font-size="11" style="fill:var(--soft)">a heading always starts a new card</text>
+        </svg>
+      </div>
+      <figcaption>Cuts land on headings first, so a card is never about two unrelated things; packing to 240 words happens inside each section. Tables are never cut through the middle.</figcaption>
+    </figure>
 
-<div class="does"><code>/brain-ask</code><span>Runs this entire pipeline and answers with the passages it ends up with.</span></div>
-<div class="does"><code>/brain-source</code><span>Sets the trust weight in that 10% slice. Your anchor repository sits at 1.0; sources added later normally sit below it.</span></div>
+    <h4 class="xh4">What else it lifts out while reading</h4>
+    <ul>
+      <li><strong>Metadata</strong> from YAML frontmatter, and also from the looser <code>**Owner:** …</code> style some corpora use instead. English and Spanish keys are both recognised.</li>
+      <li><strong>A document date</strong>, from the frontmatter, the filename, or the first stretch of prose — in ISO, day-month-year and month-day-year forms. Dates in the future are skipped deliberately: those are deadlines, not the day the document was written.</li>
+      <li><strong>Typed facts</strong> — lines like <code>- owner:: Priya since:2026-03</code>, stored as rows with a subject, a predicate, a value and optional <code>since</code>/<code>until</code> dates. <strong>Eleven</strong> predicates — <code>role</code>, <code>employer</code>, <code>owner</code>, <code>status</code>, <code>location</code>, <code>stage</code>, <code>instrument</code>, <code>branch</code>, <code>lead</code>, <code>phase</code>, <code>tier</code> — are <strong>functional</strong>, meaning they hold one value at a time, which is what makes contradictions detectable later.</li>
+      <li><strong>Wiki-style links</strong> <code>[[like this]]</code>, and a <code>superseded</code> flag when a document declares itself replaced.</li>
+    </ul>
 
-<h3 class="xh">Step 4 · How the graph moves an answer</h3>
-<p>Picture the entities and cards as dots joined by lines. Your question drops light on the dots it obviously touches — the cards the first two searches liked, plus any entity you named. That light then <b>spreads outward along the connections</b>, dimmer at each hop, for seven rounds.</p>
-<p>Cards in a well-lit neighbourhood score higher even though your words never appear in them. This is <b>personalised PageRank</b> — the idea that ranked the early web, except the starting light is placed by your question rather than spread evenly.</p>
+    <h4 class="xh4">Why re-indexing is nearly free</h4>
+    <p>Every expensive result is filed under a <strong>content fingerprint</strong> — a short hash of the exact text. Documents are fingerprinted, and so is every individual chunk. A file whose fingerprint is unchanged is skipped entirely; a changed file is re-cut, but chunks whose own text did not move keep their existing vector and entity extraction, because those are stored against the <em>chunk's</em> fingerprint, not its position.</p>
+    <p>So fixing a typo on page 4 of a long document re-embeds one card, not the document, and certainly not the corpus. The first full build is genuinely slow. Every build after it is seconds.</p>
+    <div class="xaside">At the end of every index run the plugin touches an empty file called <code>.indexed</code>. A hook that runs when Claude Code starts compares your markdown against that marker's timestamp and tells you how many files have moved ahead of the index — the same number the health strip at the top of this page shows. It reports; it never acts.</div>
+  </div>
+</section>
 
-<figure>
-<svg viewBox="0 0 700 200" role="img" aria-label="Light placed on a seed node spreads outward through the graph, dimming each hop, lifting passages the question never mentioned.">
-  <g stroke="currentColor" opacity=".28">
-    <line x1="110" y1="100" x2="240" y2="52"/><line x1="110" y1="100" x2="240" y2="148"/>
-    <line x1="240" y1="52" x2="370" y2="40"/><line x1="240" y1="52" x2="370" y2="100"/>
-    <line x1="240" y1="148" x2="370" y2="100"/><line x1="240" y1="148" x2="370" y2="164"/>
-    <line x1="370" y1="40" x2="496" y2="64"/><line x1="370" y1="100" x2="496" y2="64"/>
-    <line x1="370" y1="100" x2="496" y2="138"/><line x1="370" y1="164" x2="496" y2="138"/>
-    <line x1="496" y1="64" x2="602" y2="100"/><line x1="496" y1="138" x2="602" y2="100"/>
-  </g>
-  <circle cx="110" cy="100" r="15" style="fill:var(--accent);fill-opacity:.95"/>
-  <circle cx="240" cy="52" r="12" style="fill:var(--accent);fill-opacity:.55"/>
-  <circle cx="240" cy="148" r="12" style="fill:var(--accent);fill-opacity:.55"/>
-  <circle cx="370" cy="40" r="10" style="fill:var(--accent);fill-opacity:.3"/>
-  <circle cx="370" cy="100" r="10" style="fill:var(--accent);fill-opacity:.3"/>
-  <circle cx="370" cy="164" r="10" style="fill:var(--accent);fill-opacity:.3"/>
-  <circle cx="496" cy="64" r="9" fill="currentColor" fill-opacity=".16"/>
-  <circle cx="496" cy="138" r="9" fill="currentColor" fill-opacity=".16"/>
-  <circle cx="602" cy="100" r="8" fill="currentColor" fill-opacity=".09"/>
-  <text x="110" y="136" font-size="10.5" style="fill:var(--accent)" text-anchor="middle">seed</text>
-  <text x="110" y="150" font-size="9.5" fill="currentColor" text-anchor="middle" opacity=".55">your question</text>
-  <text x="240" y="22" font-size="9.5" fill="currentColor" text-anchor="middle" opacity=".55">1 hop</text>
-  <text x="370" y="192" font-size="9.5" fill="currentColor" text-anchor="middle" opacity=".55">2 hops</text>
-  <text x="602" y="128" font-size="9.5" fill="currentColor" text-anchor="middle" opacity=".5">too far</text>
-</svg>
-<figcaption>Light starts on what the question touches and dims with distance. Passages two steps away still get a lift — found through what they connect to, not what they say.</figcaption>
-</figure>
+<section id="x-three">
+  <div class="rail"><span class="num">04</span><span class="chip">/brain-index</span><span class="rnote">Builds all three lookups in one pass.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Three ways to find a card</h3>
+    <p>Indexing does not build one lookup structure. It builds three, each blind in a different way. These three colours carry through the rest of this page.</p>
 
-<div class="does"><code>/brain-view</code><span>The Graph tab above draws this network — nodes sized by how often they appear, click one to isolate its neighbourhood.</span></div>
+    <figure>
+      <div class="scrollx">
+        <div class="lanes">
+          <div class="lane lex">
+            <h4>Keyword</h4>
+            <p class="mech">SQLite FTS5 · BM25</p>
+            <p>A proper full-text index — a word-to-cards lookup table, so cost scales with matching rows, not corpus size. Accents are folded, so <em>Peña</em> finds <em>Pena</em>. A match in the title counts double, in a heading 1.5×.</p>
+          </div>
+          <div class="lane sem">
+            <h4>Meaning</h4>
+            <p class="mech">bge-m3 · 1024 numbers per card</p>
+            <p>Each card becomes a list of numbers positioned so that similar meanings sit close together. “Settlement latency” lands near “merchants get paid faster”. Multilingual: a Spanish card answers an English question.</p>
+          </div>
+          <div class="lane gph">
+            <h4>Connections</h4>
+            <p class="mech">a network of nodes and links</p>
+            <p>Cards, documents, folders and entities as points, joined by links. It knows two passages concern the same project when they share no vocabulary at all.</p>
+          </div>
+        </div>
+      </div>
+      <figcaption>Three independent signals, built in one indexing pass. None is allowed to answer alone.</figcaption>
+    </figure>
 
-<h3 class="xh">Where the network comes from</h3>
-<p>Something has to read the cards and write down what is in them. Batches are handed to Claude with a strict instruction: list the entities this passage <em>actually names</em> and the relationships it <em>actually states</em> — invent nothing, bring in nothing from outside.</p>
-<p>Two choices make this practical. It runs as subagents <b>in your own session</b>, so it costs time and context rather than money. And every card is tracked by a <b>fingerprint of its text</b>, so a card that has not changed is never re-read — stop the job halfway and nothing is lost or repeated.</p>
-<p>Extraction names things as the text spells them, so one company can arrive as several entries — an abbreviation and its expansion, a name and a transcript's misspelling. A later pass folds those together, but only when <b>two independent extractions each called the other an alias</b>. That conservative rule is what stops a product being swallowed by the company it is named after.</p>
+    <h4 class="xh4">The vectors, plainly</h4>
+    <p>An <strong>embedding</strong> turns a passage into 1024 numbers — coordinates in a space where “nearby” means “similar in meaning”. Comparing two passages is a single multiplication, and the vectors are pre-normalised so that multiplication <em>is</em> the similarity score. Comparing your question against every card is one matrix operation, fast enough not to need any approximate index.</p>
 
-<div class="does"><code>/brain-enrich</code><span>Runs the extraction batch by batch. Safe to stop and resume.</span></div>
-<div class="does"><code>merge_entities</code><span>Runs the folding pass. Ask for the plan first — it shows exactly what it proposes to merge.</span></div>
+    <h4 class="xh4">The network, plainly</h4>
+    <p>The graph has four kinds of point, distinguished by a prefix, and six kinds of link:</p>
+    <figure>
+      <div class="scrollx">
+        <table class="xtable">
+          <thead><tr><th>Link</th><th>Joins</th><th>Meaning</th><th>Strength</th></tr></thead>
+          <tbody>
+            <tr><td><code>in_doc</code></td><td>card → document</td><td>this card is part of that file</td><td class="num">1.0</td></tr>
+            <tr><td><code>next</code></td><td>card → card</td><td>they were adjacent on the page</td><td class="num">0.6</td></tr>
+            <tr><td><code>topic</code></td><td>document → folder</td><td>up to three folder levels deep</td><td class="num">0.5</td></tr>
+            <tr><td><code>mentions</code></td><td>card → entity</td><td>this card names that person or thing</td><td class="num">1.0</td></tr>
+            <tr><td><code>relates</code></td><td>entity → entity</td><td>a stated relationship between them</td><td class="num">grows with evidence</td></tr>
+            <tr><td><code>similar</code></td><td>card → card</td><td>the 4 nearest cards by meaning, above 0.50</td><td class="num">the similarity itself</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figcaption>Points are <code>c:</code> cards, <code>d:</code> documents, <code>t:</code> folders, <code>e:</code> entities. The <code>similar</code> links are built from the embeddings, which is how the meaning layer feeds the graph layer. This is the network the <b>Graph</b> tab draws.</figcaption>
+    </figure>
+    <p>The first three link types come free from the file structure. <code>mentions</code> and <code>relates</code> only exist once you have run enrichment — which is the next step.</p>
+  </div>
+</section>
 
-<h3 class="xh">The layer above · answers no passage contains</h3>
-<p>Ask "what are our recurring risks?" and there is no card to find. The answer is spread across dozens.</p>
-<p>So an algorithm called <b>Leiden</b> looks at the entity network and finds its <b>communities</b> — clusters that connect to each other far more than to everything else, the way friend groups emerge in a social network without anyone labelling them. Each cluster is summarised, and those summaries become searchable objects that still point back to the real files.</p>
+<section id="x-entities">
+  <div class="rail"><span class="num">05</span><span class="chip">/brain-enrich</span><span class="chip tool">enrich_pull</span><span class="chip tool">enrich_push</span><span class="rnote">Costs session context, not money.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Teaching it who's who</h3>
+    <p>Nothing so far knows that “Priya” is a person or that a company and a product are connected. Building that layer means reading every card and asking what it names — a job for a language model.</p>
+    <p>The clever part is <strong>who does the reading</strong>. Rather than calling a paid API, <span class="chip">/brain-enrich</span> uses subagents inside your own Claude Code session.</p>
 
-<div class="does"><code>/brain-enrich --communities</code><span>Finds the clusters and writes the summaries. Needs the entity network first.</span></div>
-<div class="does"><code>search_themes</code><span>Ranks those summaries instead of passages — for when no single document holds the answer.</span></div>
+    <figure>
+      <div class="step"><span class="lbl">1 · lease</span><p><b>enrich_pull</b> hands out a batch of cards that have never been extracted, and marks them “leased” so two runs cannot duplicate each other's work. An abandoned lease returns to the queue after <b>30 minutes</b>.</p></div>
+      <p class="down">↓</p>
+      <div class="step"><span class="lbl">2 · fan out</span><p>The cards are split into groups of about 15 and handed to several subagents <b>launched in one message</b>, so they run at the same time. Each gets a strict contract: return JSON only, use names exactly as the text spells them, invent nothing, and both ends of every relationship must appear in that card's own entity list.</p></div>
+      <p class="down">↓</p>
+      <div class="step"><span class="lbl">3 · validate</span><p>Replies are checked before they are trusted: valid JSON, fingerprints that were actually handed out, no relationship pointing at an entity the card never named. Anything failing is dropped rather than pushed.</p></div>
+      <p class="down">↓</p>
+      <div class="step"><span class="lbl">4 · write back</span><p><b>enrich_push</b> stores entities, their aliases, which cards mention them, and the relationships between them — then rebuilds the graph so the new links are live.</p></div>
+    </figure>
 
-<h3 class="xh">Why it stays fast</h3>
-<p>Everything expensive — turning a card into 1,024 numbers, having Claude read it — is stored against a <b>fingerprint of that card's exact text</b>. Re-indexing compares fingerprints and skips whatever has not moved. Edit one paragraph and only the cards that actually changed are recomputed.</p>
-<p>A first full index of a few hundred thousand words takes tens of minutes. Every index after that takes seconds.</p>
+    <p>Two properties make this survivable on a large corpus. It is <strong>resumable</strong>: the queue is keyed by card fingerprint, so you can stop after any round and pick up later. And it is <strong>idempotent</strong>: a card whose text has not changed is never extracted twice, no matter how often you re-index.</p>
+    <p>Entities are stored under a normalised key, so <em>Acme Corp.</em>, <em>acme-corp</em> and <em>ACME</em> resolve to one row, with every spelling kept as a searchable alias. Repeated evidence for the same relationship increases its weight rather than duplicating it.</p>
+    <div class="xaside">Retrieval already works without any of this — keyword and meaning are live the moment <span class="chip">/brain-index</span> finishes. Enrichment adds the third signal and unlocks theme questions.</div>
+  </div>
+</section>
 
-<div class="does"><code>/brain-index</code><span>Cheap to run often. When files move ahead of the index, the health strip at the top of this page says so.</span></div>
+<section id="x-merge">
+  <div class="rail"><span class="num">06</span><span class="chip tool">merge_entities</span><span class="rnote">Between enrichment and clustering.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Folding duplicates together</h3>
+    <p>Extraction names things as the text spells them, so one company arrives as several rows: an abbreviation, its expansion, a legal name, and whatever a transcript made of someone's surname. Left alone this splits the graph — each fragment holds part of the connections, and looking one up shows you part of what is known.</p>
+    <p>The merge is deliberately conservative. It folds two entities together <strong>only when each side was independently declared an alias of the other</strong>. A one-directional claim is usually a <em>part-of</em> relationship, not a synonym — which is exactly what stops <em>Acme Pay</em> being swallowed by <em>Acme</em>.</p>
+    <p>Chains collapse in one pass, so a short name, a full name and a misspelling of it all land on the same row. The surviving row is the <strong>most-mentioned</strong> one — it carries the graph's mass — but it is <em>displayed</em> under the fullest spelling, and every variant stays a searchable alias, so retrieval is unaffected either way.</p>
+    <p>Run it with <code>apply: false</code> first to read the plan; the longest spelling is occasionally the garbled one.</p>
+  </div>
+</section>
 
-<h3 class="xh">The other direction · putting knowledge back</h3>
-<p>Tell the brain something worth keeping and it writes a real markdown file into your repository — dated, titled, tagged, with a confidence level and links to entities it recognises — then indexes it immediately.</p>
-<p>That direction matters more than it sounds. <b>Your markdown is the truth; the index is disposable.</b> Delete the whole database and you lose an afternoon of recomputation, never any knowledge.</p>
+<section id="x-comm">
+  <div class="rail"><span class="num">07</span><span class="chip">/brain-enrich --communities</span><span class="rnote">Only once the extraction queue is empty.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Clusters, and what each is about</h3>
+    <p>Some questions have no answer in any single passage. <em>“What are our recurring risks?”</em> is answered by a pattern spread across thirty documents that never mention each other.</p>
+    <ol>
+      <li><strong>Partition the entity graph.</strong> An algorithm called <strong>Leiden</strong> finds groups of entities much more connected to each other than to the rest — the way friend groups emerge in a social network without anyone labelling them. It runs at two granularities, <code>0.6</code> and <code>1.2</code>: a coarse pass giving few large clusters, a fine pass giving many small ones. Groups of fewer than three entities are dropped as noise.</li>
+      <li><strong>Summarise each cluster.</strong> A subagent is given one cluster's entities, the relationships among them, and real evidence passages, and writes a 5–8 word title, a 150–250 word summary and an importance rating out of ten — grounded strictly in the evidence supplied.</li>
+      <li><strong>Store the summary as a first-class object</strong>, embedded like any other text, so it can be searched on its own terms.</li>
+    </ol>
+    <p>Re-summarising is incremental in the same way indexing is: each cluster is fingerprinted by its membership list, so after a re-index only the clusters whose membership actually moved need rewriting. These summaries are what the <b>Communities</b> tab lists.</p>
+  </div>
+</section>
 
-<div class="does"><code>/brain-add</code><span>Writes the note and indexes it, so the very next search finds it.</span></div>
-<div class="does"><code>/brain-dream</code><span>Reports contradictions, ageing facts and orphans across what you have written. It reports; it never edits.</span></div>
+<section id="x-ask">
+  <div class="rail"><span class="num">08</span><span class="chip">/brain-ask</span><span class="chip tool">search_evidence</span><span class="rnote">The moment everything else was preparing for.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Answering a question</h3>
 
-<h3 class="xh">Every command, and the part it drives</h3>
-<p>Read top to bottom, this is also the order you run them in.</p>
-<div class="xscroll">
-<table class="xtable">
-<thead><tr><th>Command</th><th>The concept it drives</th></tr></thead>
-<tbody>
-<tr><td>/brain-setup</td><td>Fetches the model that turns a card into 1,024 numbers. Without it the <b>meaning</b> search is unavailable.</td></tr>
-<tr><td>/brain-source</td><td>Chooses which repositories become cards, and sets each one's <b>trust weight</b>.</td></tr>
-<tr><td>/brain-index</td><td>Cuts documents into <b>cards</b>, builds the <b>exact-word index</b>, and embeds whatever's <b>fingerprint</b> changed.</td></tr>
-<tr><td>/brain-enrich</td><td>Reads the cards to build the <b>entity network</b>.</td></tr>
-<tr><td>/brain-enrich --communities</td><td>Clusters that network and writes a <b>summary per cluster</b>.</td></tr>
-<tr><td>/brain-ask</td><td>Runs all three searches, the <b>rank-fusion vote</b> and the rerank.</td></tr>
-<tr><td>entity</td><td>Queries the <b>network</b> directly when your question names one thing.</td></tr>
-<tr><td>search_themes</td><td>Ranks the <b>cluster summaries</b> instead of passages.</td></tr>
-<tr><td>/brain-add</td><td>Writes new knowledge back as <b>markdown</b>.</td></tr>
-<tr><td>/brain-dream</td><td>Reports contradictions, ageing facts and orphans.</td></tr>
-<tr><td>/brain-view</td><td>Opens this dashboard.</td></tr>
-</tbody>
-</table>
-</div>
-<p class="note">Only the first four are needed before the brain is useful. <code>/brain-setup</code> and <code>/brain-index</code> alone give you two of the three searches; everything after adds the graph and the layer above it.</p>
+    <figure>
+      <div class="step"><span class="lbl">1 · three searches at once</span><p>The keyword index and the vector comparison each return their <b>top 200 cards</b>, in their own order. Separately, any entity whose alias appears in the question is noted.</p></div>
+      <p class="down">↓</p>
+      <div class="step"><span class="lbl">2 · fuse the rankings</span><p>The scores are not comparable — one is a BM25 number, the other a cosine similarity — so they are thrown away and only <b>positions</b> are kept.</p></div>
+      <p class="down">↓</p>
+      <div class="step"><span class="lbl">3 · let the graph vote</span><p>The <b>20 best</b> fused cards, plus the matched entities, become starting points for a walk through the network.</p></div>
+      <p class="down">↓</p>
+      <div class="step"><span class="lbl">4 · score, penalise, diversify</span><p>Four factors combine into a final number, superseded documents are cut to 45%, and at most <b>two cards per document</b> reach the results.</p></div>
+    </figure>
+
+    <h4 class="xh4">Step 2, drawn: voting by position</h4>
+    <p>This is <strong>reciprocal rank fusion</strong>, and it behaves like a ranked-choice election. Each method votes for a card with strength <code>1 / (60 + rank)</code>, and the votes are added.</p>
+
+    <figure>
+      <div class="drawn scrollx">
+        <svg viewBox="0 0 720 250" role="img" aria-label="Three ranked lists vote by position. Card A places second, second and first, totalling 0.0487, and beats card B which places first in one list only.">
+          <text x="0" y="12" font-size="10.5" letter-spacing="1.4" style="fill:var(--x-dim)">RANK</text>
+          <text x="150" y="12" font-size="10.5" style="fill:var(--x-dim)">1</text>
+          <text x="290" y="12" font-size="10.5" style="fill:var(--x-dim)">2</text>
+          <text x="430" y="12" font-size="10.5" style="fill:var(--x-dim)">3</text>
+
+          <text x="0" y="42" font-size="12" style="fill:var(--sig-lex)">keyword</text>
+          <rect x="130" y="26" width="120" height="26" rx="2" style="fill:var(--x-tint-lex);stroke:var(--sig-lex)"/>
+          <text x="184" y="44" font-size="12" style="fill:var(--ink)">B</text>
+          <rect x="270" y="26" width="120" height="26" rx="2" style="fill:var(--x-tint-lex);stroke:var(--sig-lex);stroke-width:2"/>
+          <text x="324" y="44" font-size="12" style="fill:var(--ink)">A</text>
+          <rect x="410" y="26" width="120" height="26" rx="2" style="fill:var(--x-tint-lex);stroke:var(--sig-lex)"/>
+          <text x="464" y="44" font-size="12" style="fill:var(--ink)">D</text>
+
+          <text x="0" y="82" font-size="12" style="fill:var(--sig-sem)">meaning</text>
+          <rect x="130" y="66" width="120" height="26" rx="2" style="fill:var(--x-tint-sem);stroke:var(--sig-sem)"/>
+          <text x="184" y="84" font-size="12" style="fill:var(--ink)">C</text>
+          <rect x="270" y="66" width="120" height="26" rx="2" style="fill:var(--x-tint-sem);stroke:var(--sig-sem);stroke-width:2"/>
+          <text x="324" y="84" font-size="12" style="fill:var(--ink)">A</text>
+          <rect x="410" y="66" width="120" height="26" rx="2" style="fill:var(--x-tint-sem);stroke:var(--sig-sem)"/>
+          <text x="464" y="84" font-size="12" style="fill:var(--ink)">E</text>
+
+          <text x="0" y="122" font-size="12" style="fill:var(--sig-gph)">graph</text>
+          <rect x="130" y="106" width="120" height="26" rx="2" style="fill:var(--x-tint-gph);stroke:var(--sig-gph);stroke-width:2"/>
+          <text x="184" y="124" font-size="12" style="fill:var(--ink)">A</text>
+          <rect x="270" y="106" width="120" height="26" rx="2" style="fill:var(--x-tint-gph);stroke:var(--sig-gph)"/>
+          <text x="324" y="124" font-size="12" style="fill:var(--ink)">F</text>
+          <rect x="410" y="106" width="120" height="26" rx="2" style="fill:var(--x-tint-gph);stroke:var(--sig-gph)"/>
+          <text x="464" y="124" font-size="12" style="fill:var(--ink)">B</text>
+
+          <line x1="0" y1="152" x2="720" y2="152" style="stroke:var(--rule)"/>
+
+          <text x="0" y="178" font-size="12" style="fill:var(--soft)">A</text>
+          <text x="26" y="178" font-size="11.5" style="fill:var(--x-dim)">1/62 + 1/62 + 1/61</text>
+          <text x="200" y="178" font-size="12" style="fill:var(--ink)">= 0.0487</text>
+          <rect x="290" y="167" width="330" height="14" rx="1" style="fill:var(--accent);opacity:.8"/>
+          <text x="630" y="178" font-size="11.5" style="fill:var(--ink)">wins</text>
+
+          <text x="0" y="206" font-size="12" style="fill:var(--soft)">B</text>
+          <text x="26" y="206" font-size="11.5" style="fill:var(--x-dim)">1/61 + —— + 1/63</text>
+          <text x="200" y="206" font-size="12" style="fill:var(--soft)">= 0.0323</text>
+          <rect x="290" y="195" width="219" height="14" rx="1" style="fill:var(--x-dim);opacity:.5"/>
+
+          <text x="0" y="234" font-size="12" style="fill:var(--soft)">C</text>
+          <text x="26" y="234" font-size="11.5" style="fill:var(--x-dim)">—— + 1/61 + ——</text>
+          <text x="200" y="234" font-size="12" style="fill:var(--soft)">= 0.0164</text>
+          <rect x="290" y="223" width="111" height="14" rx="1" style="fill:var(--x-dim);opacity:.34"/>
+        </svg>
+      </div>
+      <figcaption>B is ranked first by one method and still loses. Agreement between independent methods is stronger evidence than one method's enthusiasm — and throwing the scores away is what lets incompatible units be combined at all.</figcaption>
+    </figure>
+
+    <h4 class="xh4">Step 3, drawn: letting the graph vote</h4>
+    <p>Score is released at the starting points and flows outward — a card passes credit to its document, its neighbours on the page, the entities it names, and the cards nearest it in meaning. Each round, <strong>18% leaks back</strong> to the starting points, which is what keeps the walk anchored to your question instead of drifting to whatever is most connected overall. Seven rounds. This is <strong>personalised PageRank</strong>.</p>
+
+    <figure>
+      <div class="drawn scrollx">
+        <svg viewBox="0 0 720 230" role="img" aria-label="Score starts on the cards the first two searches found, then flows outward through the network, dimming at each hop. A card two hops out that contains none of the query words still surfaces.">
+          <defs>
+            <marker id="xar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" style="fill:var(--x-dim)"/>
+            </marker>
+          </defs>
+
+          <text x="0" y="14" font-size="10.5" letter-spacing="1.4" style="fill:var(--x-dim)">SEEDS</text>
+          <text x="222" y="14" font-size="10.5" letter-spacing="1.4" style="fill:var(--x-dim)">ONE HOP</text>
+          <text x="444" y="14" font-size="10.5" letter-spacing="1.4" style="fill:var(--x-dim)">TWO HOPS</text>
+
+          <line x1="76" y1="70" x2="238" y2="56" style="stroke:var(--x-dim);stroke-width:1.2" marker-end="url(#xar)"/>
+          <line x1="76" y1="70" x2="238" y2="130" style="stroke:var(--x-dim);stroke-width:1.2" marker-end="url(#xar)"/>
+          <line x1="76" y1="150" x2="238" y2="130" style="stroke:var(--x-dim);stroke-width:1.2" marker-end="url(#xar)"/>
+          <line x1="272" y1="56" x2="452" y2="60" style="stroke:var(--x-dim);stroke-width:1.2" marker-end="url(#xar)"/>
+          <line x1="272" y1="130" x2="452" y2="60" style="stroke:var(--sig-gph);stroke-width:2" marker-end="url(#xar)"/>
+          <line x1="272" y1="130" x2="452" y2="146" style="stroke:var(--x-dim);stroke-width:1.2" marker-end="url(#xar)"/>
+
+          <path d="M470,178 C330,215 150,205 62,182" style="fill:none;stroke:var(--accent);stroke-width:1.4;stroke-dasharray:5 4" marker-end="url(#xar)"/>
+          <text x="228" y="222" font-size="11" style="fill:var(--accent)">18% restarts at the seeds, every round</text>
+
+          <circle cx="60" cy="70" r="17" style="fill:var(--accent);opacity:.9"/>
+          <text x="53" y="75" font-size="11" style="fill:var(--surface)">1.0</text>
+          <circle cx="60" cy="150" r="17" style="fill:var(--accent);opacity:.9"/>
+          <text x="53" y="155" font-size="11" style="fill:var(--surface)">1.0</text>
+
+          <circle cx="255" cy="56" r="15" style="fill:var(--accent);opacity:.55"/>
+          <circle cx="255" cy="130" r="15" style="fill:var(--accent);opacity:.55"/>
+          <text x="222" y="164" font-size="11" style="fill:var(--x-dim)">·82 of what flows in</text>
+
+          <circle cx="470" cy="60" r="15" style="fill:var(--sig-gph);opacity:.9"/>
+          <circle cx="470" cy="146" r="13" style="fill:var(--accent);opacity:.32"/>
+
+          <line x1="486" y1="60" x2="556" y2="60" style="stroke:var(--sig-gph);stroke-width:1.2;stroke-dasharray:3 3"/>
+          <text x="562" y="50" font-size="11" style="fill:var(--ink)">none of your words —</text>
+          <text x="562" y="66" font-size="11" style="fill:var(--ink)">surfaces anyway, through</text>
+          <text x="562" y="82" font-size="11" style="fill:var(--ink)">what it connects to</text>
+        </svg>
+      </div>
+      <figcaption>Light starts on what the question obviously touches and dims with distance. The amber card is the one this signal exists to find: nothing lexical or semantic reaches it.</figcaption>
+    </figure>
+
+    <h4 class="xh4">The final score, in proportion</h4>
+    <figure>
+      <div class="scrollx">
+        <div class="bar">
+          <div class="b1">0.55 fused</div>
+          <div class="b2">0.25 graph</div>
+          <div class="b3">0.10 source</div>
+          <div class="b4">0.10 fresh</div>
+        </div>
+      </div>
+      <div class="barkey">
+        <span><b class="k-lex">fused</b> = keyword + <b class="k-sem">meaning</b>, by rank</span>
+        <span><b class="k-gph">graph</b> = network flow</span>
+        <span><b>source</b> = trust weight</span>
+        <span><b>fresh</b> = decays over ~5 years</span>
+      </div>
+      <figcaption>The first bar is shaded across both colours because it <em>is</em> the two searches combined. Two adjustments sit on top: a document whose path or title contains <code>template</code>, <code>placeholder</code>, <code>testfile</code> or <code>test-file</code> is scored down to 0.15 regardless of its source weight; anything marked superseded is multiplied by 0.45 rather than hidden, so you can still see it and be told what replaced it.</figcaption>
+    </figure>
+
+    <p>Two more rules shape what you finally see: at most two cards from any one document, and <strong>never the same heading twice</strong> — so a long section cannot answer with two adjacent halves of itself.</p>
+    <p>What comes back is not an answer. It is <strong>ranked evidence</strong> — passages with a source, a path, a line, a date, a superseded flag and a score — plus a report of which signals were actually available. The reasoning stays with the model, and the answer standard the command enforces is: lead with the answer, cite <code>path:line</code>, keep stated evidence separate from inference, and surface conflicts rather than blending them.</p>
+    <p><code>mode</code> changes the shape of the results: <strong>local</strong> concentrates on the best evidence, <strong>global</strong> forces the first <strong>five</strong> results to come from different areas of the corpus.</p>
+  </div>
+</section>
+
+<section id="x-themes">
+  <div class="rail"><span class="num">09</span><span class="chip tool">search_themes</span><span class="chip tool">entity</span><span class="chip tool">neighbours</span></div>
+  <div class="xbody">
+    <h3 class="xh">Questions no passage answers</h3>
+    <p>Picking the right entry point matters more than phrasing the question well.</p>
+    <figure>
+      <div class="scrollx">
+        <table class="xtable">
+          <thead><tr><th>You have</th><th>Use</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>One named thing</td><td><code>entity</code></td><td>Resolves nicknames and misspellings to one node, then returns its type, aliases, related entities, the documents that mention it and every typed fact about it. Unknown names come back with near-miss suggestions rather than an error.</td></tr>
+            <tr><td>A question needing evidence</td><td><code>/brain-ask</code></td><td>The full three-signal pipeline above. Returns passages with <code>path:line</code>.</td></tr>
+            <tr><td>A theme or pattern</td><td><code>search_themes</code></td><td>Ranks cluster summaries instead of passages: 60% meaning-similarity, 25% word overlap, 15% the cluster's own importance rating. Each result still carries citations back to real files.</td></tr>
+            <tr><td>A thread to pull</td><td><code>neighbours</code></td><td>Walks outward from any node id returned above.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </figure>
+    <p>The command layer wraps this in a <strong>bounded loop</strong>: name the facets the answer needs, retrieve once, identify what is missing, then run at most two targeted follow-ups. Three passes maximum, on purpose — retrieval that recurses freely manufactures confidence it has not earned.</p>
+  </div>
+</section>
+
+<section id="x-capture">
+  <div class="rail"><span class="num">10</span><span class="chip">/brain-add</span><span class="chip tool">remember</span><span class="rnote">The only command that writes real markdown.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Putting knowledge back in</h3>
+    <p>Everything so far reads. This writes — and it writes <strong>markdown into your repo</strong>, not a hidden row in a database. A note that existed only inside the index would be invisible to every other tool you own, and would vanish with the index.</p>
+    <p><span class="chip">/brain-add</span> creates a dated, titled file in <code>memory/inbox/</code> with frontmatter, tags, a confidence level and a provenance block, then immediately re-indexes, re-embeds and rebuilds the graph so the next search finds it.</p>
+    <h4 class="xh4">Two things it is strict about</h4>
+    <ul>
+      <li><strong>Confidence is recorded, not assumed.</strong> Every note is marked <code>stated</code> (you asserted it), <code>observed</code> (seen in a source), <code>inferred</code> (concluded) or <code>draft</code>. Nothing you did not actually say is filed as stated.</li>
+      <li><strong>Typed facts are never invented.</strong> Facts use <code>predicate:: value</code>, or <code>subject|predicate:: value</code> when the fact is about something other than the note itself. They are only written when you actually stated them.</li>
+    </ul>
+    <p>The note is auto-linked to entities it recognises, but only distinctive ones — aliases shorter than five characters and generic words like <em>company</em> or <em>project</em> are skipped, because linking everything to everything makes a hub that helps nobody.</p>
+    <p>Facts that go stale are <strong>closed, not deleted</strong>: add <code>until:</code> to the old assertion rather than removing it. History stays readable, and the maintenance report can then tell you when two open values contradict.</p>
+  </div>
+</section>
+
+<section id="x-upkeep">
+  <div class="rail"><span class="num">11</span><span class="chip">/brain-dream</span><span class="chip">/brain-source</span><span class="chip tool">status</span></div>
+  <div class="xbody">
+    <h3 class="xh">Keeping it honest</h3>
+    <p><span class="chip">/brain-dream</span> is a maintenance report. It reports and never edits — picking a winner silently is how a memory system starts lying. It looks for:</p>
+    <ul>
+      <li><strong>Contradictions</strong> — two open values for one functional predicate, each shown with its <code>path:line</code>. The fix is to close the older with <code>until:</code>.</li>
+      <li><strong>Ageing facts</strong> — open functional assertions more than twelve months old.</li>
+      <li><strong>Duplicate claims</strong> — the same fact stated in more than one file.</li>
+      <li><strong>Superseded documents</strong> still being indexed, <strong>hubs</strong> that everything connects through, and <strong>documents no entity touches</strong> — usually a sign enrichment has not reached them.</li>
+    </ul>
+    <p><span class="chip">/brain-source</span> manages which repositories are read. <code>add &lt;path&gt; &lt;name&gt; [weight]</code> appends one; the weight defaults to 0.8, below the anchor's 1.0. Version-history folders, <code>node_modules</code>, dotfiles and virtual environments are skipped automatically. One <span class="chip">/brain-index</span> then walks every configured repo, so changes anywhere are picked up in one command.</p>
+    <p><code>status</code> reports document and card counts per source, how many cards have vectors, how large the graph is, and how many cards are still waiting for enrichment — the numbers along the top of this page.</p>
+  </div>
+</section>
+
+<section id="x-plumb">
+  <div class="rail"><span class="num">12</span><span class="chip">/brain-view</span><span class="chip tool">open_view</span></div>
+  <div class="xbody">
+    <h3 class="xh">The wiring underneath</h3>
+    <h4 class="xh4">How Claude reaches the engine</h4>
+    <p>The engine is an <strong>MCP server</strong> — a small program Claude Code launches at session start and talks to over standard input and output. It exposes the <strong>seventeen</strong> tools named throughout this page. Because it only loads at session start, installing or updating the plugin needs a restart before the commands appear.</p>
+    <p>Three pieces of configuration are handed to it: which project it is anchored to, which embedding model to use, and which port this dashboard should prefer.</p>
+
+    <h4 class="xh4">This page</h4>
+    <p>It runs on a background thread <em>inside</em> the MCP process, so it lives and dies with the session — no stray process to supervise. It binds to <code>127.0.0.1</code> only, tries port 4717 then the next twenty then any free one, checks the <code>Host</code> header on every request so a web page you visit cannot reach it by DNS rebinding, serves an explicit list of files rather than joining request paths onto a directory, and has no write routes at all. That is why it is read-only: questions go through <span class="chip">/brain-ask</span>, not through here.</p>
+
+    <h4 class="xh4">What never leaves the machine</h4>
+    <ul>
+      <li>The embedding model runs locally — no API key, no inference request, no upload.</li>
+      <li>Entity extraction runs as subagents in your own Claude Code session.</li>
+      <li>The index lives inside your repo and is gitignored by default.</li>
+      <li>This dashboard is loopback-only and read-only.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="x-map">
+  <div class="rail"><span class="num">13</span><span class="rnote">The whole thing on one screen.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Every command, and the mechanism it drives</h3>
+    <figure>
+      <div class="scrollx">
+        <table class="xtable">
+          <thead><tr><th>Command</th><th>Mechanism it drives</th><th>Writes</th></tr></thead>
+          <tbody>
+            <tr><td><code>/brain-setup</code></td><td>Builds the light server environment and the heavy embedding environment, then warms the model so the first search is not slow.</td><td>Nothing in your repo</td></tr>
+            <tr><td><code>/brain-index</code></td><td>Walks every source, cuts documents into overlapping cards, extracts metadata, dates and typed facts, embeds new text, and rebuilds the graph. Incremental by fingerprint.</td><td><code>.company-brain/</code></td></tr>
+            <tr><td><code>/brain-enrich</code></td><td>Leases un-extracted cards, fans them to parallel subagents, validates their JSON, writes entities, aliases, mentions and relations back. Resumable.</td><td><code>.company-brain/</code></td></tr>
+            <tr><td><code>/brain-enrich --communities</code></td><td>Leiden clustering at two granularities, then one subagent per cluster writing a title, summary and rating — stored and embedded as retrievable objects.</td><td><code>.company-brain/</code></td></tr>
+            <tr><td><code>/brain-ask</code></td><td>Keyword + meaning + graph, fused by reciprocal rank, re-ranked by personalised PageRank, weighted, penalised and diversified — then answered against a strict citation standard.</td><td>Nothing</td></tr>
+            <tr><td><code>/brain-add</code></td><td>Writes a dated markdown note with frontmatter, confidence, typed facts and entity links, then re-indexes it immediately.</td><td><strong>Your repo</strong></td></tr>
+            <tr><td><code>/brain-source</code></td><td>Lists or appends repositories in <code>sources.json</code>, each with the trust weight that feeds ranking.</td><td><code>.company-brain/</code></td></tr>
+            <tr><td><code>/brain-dream</code></td><td>Scans typed assertions and the graph for contradictions, ageing facts, duplicates, hubs and orphans. Reports only.</td><td>Nothing</td></tr>
+            <tr><td><code>/brain-view</code></td><td>Opens this dashboard, served from a background thread inside the MCP process.</td><td>Nothing</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figcaption>Solid chips throughout this page are slash commands; dashed chips are the underlying MCP tools, which Claude can also call directly.</figcaption>
+    </figure>
+    <h4 class="xh4">The order you run them in</h4>
+    <p><span class="chip">/brain-setup</span> once, ever. Then <span class="chip">/brain-index</span>, and search already works. Then <span class="chip">/brain-enrich</span> until the queue empties, <code>merge_entities</code>, and <span class="chip">/brain-enrich --communities</span>. After that, <span class="chip">/brain-index</span> whenever files change — seconds — and <span class="chip">/brain-dream</span> now and then.</p>
+  </div>
+</section>
+
+<section id="x-numbers">
+  <div class="rail"><span class="num">14</span><span class="rnote">Read from the source, not from memory.</span></div>
+  <div class="xbody">
+    <h3 class="xh">Every number, and the file it lives in</h3>
+    <p>Nothing here is a rule of thumb; each is a constant you can open and change.</p>
+    <figure>
+      <div class="scrollx">
+        <table class="xtable">
+          <thead><tr><th>Constant</th><th>Value</th><th>File</th></tr></thead>
+          <tbody>
+            <tr><td><code>CHUNK_WORDS</code> / <code>OVERLAP</code> / <code>MIN</code></td><td class="num">240 / 36 / 18</td><td><code>ingest.py</code></td></tr>
+            <tr><td><code>FUNCTIONAL</code> predicates</td><td class="num">11</td><td><code>ingest.py</code></td></tr>
+            <tr><td>BM25 field weights (text/title/heading)</td><td class="num">1.0 / 2.0 / 1.5</td><td><code>lexical.py</code></td></tr>
+            <tr><td>Candidates per signal</td><td class="num">200</td><td><code>search.py</code></td></tr>
+            <tr><td><code>RRF_K</code></td><td class="num">60</td><td><code>search.py</code></td></tr>
+            <tr><td>Graph seeds from the fused list</td><td class="num">20</td><td><code>search.py</code></td></tr>
+            <tr><td><code>W_FUSED</code> / <code>W_GRAPH</code> / <code>W_SOURCE</code> / <code>W_FRESH</code></td><td class="num">0.55 / 0.25 / 0.10 / 0.10</td><td><code>search.py</code></td></tr>
+            <tr><td><code>SUPERSEDED_PENALTY</code> / <code>MAX_PER_DOC</code></td><td class="num">0.45 / 2</td><td><code>search.py</code></td></tr>
+            <tr><td>Low-quality path floor</td><td class="num">0.15</td><td><code>search.py</code></td></tr>
+            <tr><td>Freshness half-life divisor</td><td class="num">1825 days</td><td><code>search.py</code></td></tr>
+            <tr><td><code>ALPHA</code> / <code>TURNS</code> (PageRank)</td><td class="num">0.82 / 7</td><td><code>graph.py</code></td></tr>
+            <tr><td><code>KNN</code> / <code>KNN_FLOOR</code> (similar links)</td><td class="num">4 / 0.50</td><td><code>graph.py</code></td></tr>
+            <tr><td><code>LEASE_MINUTES</code></td><td class="num">30</td><td><code>enrich.py</code></td></tr>
+            <tr><td><code>RESOLUTIONS</code> / <code>MIN_MEMBERS</code> (Leiden)</td><td class="num">0.6, 1.2 / 3</td><td><code>community.py</code></td></tr>
+            <tr><td>Theme scoring (meaning / overlap / rating)</td><td class="num">0.60 / 0.25 / 0.15</td><td><code>community.py</code></td></tr>
+            <tr><td><code>MAX_SEQ</code> / <code>BATCH</code> (bge-m3)</td><td class="num">512 / 16</td><td><code>embed/worker.py</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figcaption>Paths are relative to <code>server/company_brain/</code> except the last.</figcaption>
+    </figure>
+    <div class="xaside"><strong>Why 512 and not 8192.</strong> bge-m3 accepts sequences up to 8192 tokens, and leaving it there is the obvious default. It also pads every 240-word card to that length, which stalls on Apple's Metal backend. The cap is the fix, and both it and the model name are overridable by environment variable.</div>
+  </div>
+</section>
+
+<section id="x-gloss">
+  <div class="rail"><span class="num">15</span></div>
+  <div class="xbody">
+    <h3 class="xh">Glossary</h3>
+    <dl class="glossary">
+      <div><dt>chunk</dt><dd>A ~240-word slice of a document, cut at headings, overlapping its neighbours by 36 words, remembering its file, heading and starting line.</dd></div>
+      <div><dt>fingerprint (sha)</dt><dd>A short hash of exact text. Used to decide whether anything actually changed, so expensive work is never repeated.</dd></div>
+      <div><dt>embedding</dt><dd>A passage turned into 1024 numbers positioned so similar meanings sit close together. Comparing two is one multiplication.</dd></div>
+      <div><dt>FTS5 / BM25</dt><dd>SQLite's full-text index, and the classic formula for scoring a keyword match — rare words count for more, and a long document is not rewarded for repetition.</dd></div>
+      <div><dt>reciprocal rank fusion</dt><dd>Merging rankings by position rather than score, so incompatible scales cannot be compared unfairly.</dd></div>
+      <div><dt>personalised PageRank</dt><dd>Score released at chosen starting nodes and allowed to flow through the network, with some leaking back each round. Measures “well connected to what I asked about”.</dd></div>
+      <div><dt>Leiden</dt><dd>An algorithm that finds groups in a network that are much more connected internally than externally.</dd></div>
+      <div><dt>entity</dt><dd>A person, organisation, product, place, concept, event or decision, stored once under a normalised key with every spelling kept as an alias.</dd></div>
+      <div><dt>functional predicate</dt><dd>A fact that can hold only one value at a time — owner, status, role, stage. Two open values is a contradiction worth reporting.</dd></div>
+      <div><dt>anchor source</dt><dd>The repository the plugin was installed into. Trust weight 1.0, and where captured notes land.</dd></div>
+      <div><dt>MCP server</dt><dd>The engine process Claude Code launches at session start and talks to over standard input and output.</dd></div>
+    </dl>
+  </div>
+</section>
 
 </article>
