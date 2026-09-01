@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import urllib.request
 
 API_URL = "https://circleback.ai/api/mcp"
@@ -51,12 +52,46 @@ def _unwrap(result: dict) -> dict:
 
 
 def _body(payload: bytes, content_type: str) -> dict:
+    text = payload.decode(errors="replace")
     if "text/event-stream" in content_type:
-        for line in payload.decode().splitlines():
+        # SSE allows one event's payload to span several consecutive `data:`
+        # lines; they must be joined with newlines before parsing. Only the
+        # first event is relevant here — stop at the blank line that ends it.
+        data_lines = []
+        for line in text.splitlines():
             if line.startswith("data:"):
-                return json.loads(line[5:].strip())
-        raise ValueError("Circleback returned an event stream with no data frame.")
-    return json.loads(payload.decode())
+                data_lines.append(line[5:].strip())
+            elif data_lines:
+                break
+        if not data_lines:
+            raise ValueError("Circleback returned an event stream with no data frame.")
+        text = "\n".join(data_lines)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "Circleback returned an unreadable response (%s): %r" % (exc, text[:200])
+        ) from exc
+
+
+def _http_error_message(exc: urllib.error.HTTPError) -> str:
+    """Extract Circleback's own message from an HTTP error body, if any."""
+    raw = exc.read().decode(errors="replace")
+    detail = raw
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        detail = parsed.get("error") or parsed.get("message") or raw
+        if isinstance(detail, dict):
+            detail = detail.get("message", raw)
+    if exc.code in (401, 403):
+        return "Circleback rejected the API key (HTTP %s): %s. Create a new key at %s." % (
+            exc.code, detail, SETTINGS_URL)
+    if exc.code == 429:
+        return "Circleback rate-limited this request (HTTP 429): %s. Retry later." % detail
+    return "Circleback returned HTTP %s: %s" % (exc.code, detail)
 
 
 def _call(tool: str, args: dict, opener=None) -> dict:
@@ -75,8 +110,13 @@ def _call(tool: str, args: dict, opener=None) -> dict:
             "Authorization": "Bearer %s" % _api_key(),
         },
     )
-    with (opener or urllib.request.urlopen)(request, timeout=TIMEOUT_SECONDS) as response:
-        envelope = _body(response.read(), response.headers.get("Content-Type", ""))
+    try:
+        with (opener or urllib.request.urlopen)(request, timeout=TIMEOUT_SECONDS) as response:
+            envelope = _body(response.read(), response.headers.get("Content-Type", ""))
+    except urllib.error.HTTPError as exc:
+        raise ValueError(_http_error_message(exc)) from exc
+    except urllib.error.URLError as exc:
+        raise ValueError("Could not reach Circleback: %s" % exc.reason) from exc
     if envelope.get("error"):
         raise ValueError(envelope["error"].get("message", "Circleback rejected the request."))
     return _unwrap(envelope.get("result") or {})
