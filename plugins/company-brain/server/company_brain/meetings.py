@@ -33,6 +33,16 @@ TRANSCRIPT_DIR = "meeting-transcripts"
 TRANSCRIPT_SOURCE = "meeting-transcripts"
 TRANSCRIPT_WEIGHT = 0.4
 
+# A row the brain still holds a usable transcript for. 'missing' is deliberately
+# absent: its file is gone, so the meeting must be offerable and re-fetchable
+# rather than stranded in the queue forever.
+HELD_STATUSES = ("pending", "leased", "done")
+
+
+def _held(conn: sqlite3.Connection) -> set[str]:
+    return {r["meeting_id"] for r in conn.execute(
+        "SELECT meeting_id FROM meeting_queue WHERE status IN (?,?,?)", HELD_STATUSES)}
+
 
 def _api_key() -> str:
     key = os.getenv("CIRCLEBACK_API_KEY", "").strip()
@@ -173,7 +183,7 @@ def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = 
         args["searchTerm"] = query
     payload = _call("SearchMeetings", args, opener=opener)
 
-    held = {r["meeting_id"] for r in conn.execute("SELECT meeting_id FROM meeting_queue")}
+    held = _held(conn)
     rows = []
     for meeting in payload.get("meetings") or []:
         rows.append({
@@ -241,7 +251,7 @@ def _unique_name(root, stem: str, meeting_id: str) -> str:
 def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
     """Fetch and store only the meetings the user chose."""
     result: dict = {"synced": [], "skipped": [], "paths": []}
-    already_synced = {r["meeting_id"] for r in conn.execute("SELECT meeting_id FROM meeting_queue")}
+    already_synced = _held(conn)
     wanted = [mid for mid in meeting_ids if mid not in already_synced]
     result["skipped"] = [mid for mid in meeting_ids if mid in already_synced]
     if not wanted:
@@ -262,9 +272,13 @@ def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
         name = _unique_name(root, stem, meeting_id)
         (root / name).write_text(_transcript_markdown(meeting), encoding="utf-8")
         rel_path = "%s/%s" % (TRANSCRIPT_DIR, name)
+        # Upsert, not insert: a meeting whose transcript was deleted is marked
+        # 'missing' and is re-fetched here, so its row must be replaced.
         conn.execute(
             "INSERT INTO meeting_queue(meeting_id, title, held_at, rel_path, status, updated_at) "
-            "VALUES(?,?,?,?,'pending',?)",
+            "VALUES(?,?,?,?,'pending',?) ON CONFLICT(meeting_id) DO UPDATE SET "
+            "title = excluded.title, held_at = excluded.held_at, rel_path = excluded.rel_path, "
+            "status = 'pending', updated_at = excluded.updated_at",
             (meeting_id, title, held_at, rel_path, _now()))
         # Commit per meeting — and remember it locally — so a later failure in
         # this same batch cannot roll back files already written to disk, and
@@ -296,7 +310,9 @@ def pull(conn: sqlite3.Connection, limit: int = 5) -> list[dict]:
     Held in an IMMEDIATE transaction so two callers cannot lease the same
     meeting and write two summaries of it. A row whose transcript file is gone
     or unreadable is marked 'missing' and left out of the batch, rather than
-    handed to a subagent with nothing to summarise or retried forever.
+    handed to a subagent with nothing to summarise. 'missing' is not a held
+    status, so the meeting is listed as unsynced again and `sync()` re-fetches
+    it — a deleted transcript is recoverable, not a dead row.
     """
     reset_leases(conn)
     conn.execute("BEGIN IMMEDIATE")
