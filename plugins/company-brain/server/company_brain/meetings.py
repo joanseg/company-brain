@@ -22,6 +22,8 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from . import db
+
 API_URL = "https://circleback.ai/api/mcp"
 SETTINGS_URL = "https://circleback.ai/settings?tab=api-access"
 TIMEOUT_SECONDS = 60
@@ -126,6 +128,35 @@ def _call(tool: str, args: dict, opener=None) -> dict:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def ensure_sources() -> dict:
+    """Register the transcripts source and keep the anchor from double-indexing it.
+
+    The transcripts directory lives inside the anchor root, so the anchor would
+    otherwise index every transcript a second time — at full weight and with
+    enrichment on, undoing the whole point of a separate source. `ingest.walk()`
+    matches single path segments, which is why the directory is top-level and
+    named with one segment.
+    """
+    sources = db.load_sources()
+    anchor = sources[0]
+    registered = not any(s["name"] == TRANSCRIPT_SOURCE for s in sources)
+    excluded = TRANSCRIPT_DIR not in anchor.get("exclude", [])
+
+    if registered:
+        sources.append({
+            "name": TRANSCRIPT_SOURCE,
+            "root": db.project_dir() / TRANSCRIPT_DIR,
+            "weight": TRANSCRIPT_WEIGHT,
+            "enrich": False,
+            "exclude": [],
+        })
+    if excluded:
+        anchor["exclude"] = list(anchor.get("exclude", [])) + [TRANSCRIPT_DIR]
+    if registered or excluded:
+        db.save_sources(sources)
+    return {"registered": registered, "excluded": excluded}
 
 
 def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = None,
