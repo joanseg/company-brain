@@ -22,7 +22,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from . import db
+from . import capture, db
 from .ingest import slug
 
 API_URL = "https://circleback.ai/api/mcp"
@@ -274,3 +274,77 @@ def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
         result["synced"].append(meeting_id)
         result["paths"].append(rel_path)
     return result
+
+
+LEASE_MINUTES = 30
+
+
+def reset_leases(conn: sqlite3.Connection) -> int:
+    """Return abandoned leases to the queue, as `enrich.reset_leases` does."""
+    cutoff = (datetime.now(timezone.utc)
+              - timedelta(minutes=LEASE_MINUTES)).isoformat(timespec="seconds")
+    cursor = conn.execute(
+        "UPDATE meeting_queue SET status = 'pending' "
+        "WHERE status = 'leased' AND updated_at < ?", (cutoff,))
+    conn.commit()
+    return cursor.rowcount
+
+
+def pull(conn: sqlite3.Connection, limit: int = 5) -> list[dict]:
+    """Lease the next transcripts awaiting a summary.
+
+    Held in an IMMEDIATE transaction so two callers cannot lease the same
+    meeting and write two summaries of it.
+    """
+    reset_leases(conn)
+    conn.execute("BEGIN IMMEDIATE")
+    rows = conn.execute(
+        "SELECT meeting_id, title, held_at, rel_path FROM meeting_queue "
+        "WHERE status = 'pending' ORDER BY held_at LIMIT ?", (limit,)).fetchall()
+    if rows:
+        conn.executemany(
+            "UPDATE meeting_queue SET status = 'leased', updated_at = ? WHERE meeting_id = ?",
+            [(_now(), r["meeting_id"]) for r in rows])
+    conn.commit()
+
+    root = db.project_dir()
+    batch = []
+    for row in rows:
+        path = root / row["rel_path"]
+        batch.append({
+            "meeting_id": row["meeting_id"],
+            "title": row["title"],
+            "held_at": row["held_at"],
+            "transcript": path.read_text(encoding="utf-8") if path.exists() else "",
+        })
+    return batch
+
+
+def push(conn: sqlite3.Connection, results: list[dict]) -> dict:
+    """Capture each summary as a note and close its queue row."""
+    stats: dict = {"captured": 0, "paths": [], "skipped": []}
+    known = {r["meeting_id"]: r for r in conn.execute(
+        "SELECT meeting_id, title, held_at FROM meeting_queue")}
+
+    for result in results:
+        meeting_id = result.get("meeting_id")
+        summary = (result.get("summary") or "").strip()
+        if meeting_id not in known or not summary:
+            stats["skipped"].append(meeting_id)
+            continue
+        row = known[meeting_id]
+        written = capture.add(
+            conn, content=summary,
+            title="%s — %s" % (row["title"], row["held_at"] or "meeting"),
+            kind="meeting", tags=["meeting", "circleback"],
+            related=list(result.get("related") or []),
+            facts=list(result.get("facts") or []),
+            confidence="observed")
+        conn.execute("UPDATE meeting_queue SET status = 'done', updated_at = ? "
+                     "WHERE meeting_id = ?", (_now(), meeting_id))
+        stats["captured"] += 1
+        stats["paths"].append(written["relative"])
+    conn.commit()
+    stats["pending"] = conn.execute(
+        "SELECT COUNT(*) FROM meeting_queue WHERE status = 'pending'").fetchone()[0]
+    return stats
