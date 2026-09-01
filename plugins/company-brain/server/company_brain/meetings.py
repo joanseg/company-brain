@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 API_URL = "https://circleback.ai/api/mcp"
 SETTINGS_URL = "https://circleback.ai/settings?tab=api-access"
@@ -120,3 +122,36 @@ def _call(tool: str, args: dict, opener=None) -> dict:
     if envelope.get("error"):
         raise ValueError(envelope["error"].get("message", "Circleback rejected the request."))
     return _unwrap(envelope.get("result") or {})
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = None,
+                  opener=None) -> list[dict]:
+    """What Circleback has in the window, with what the brain already holds marked.
+
+    Read-only on purpose: browsing must never write, so the user can look before
+    choosing anything.
+    """
+    args: dict = {"pageIndex": 0,
+                  "startDate": (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()}
+    if query:
+        args["searchTerm"] = query
+    payload = _call("SearchMeetings", args, opener=opener)
+
+    held = {r["meeting_id"] for r in conn.execute("SELECT meeting_id FROM meeting_queue")}
+    rows = []
+    for meeting in payload.get("meetings") or []:
+        rows.append({
+            "id": meeting.get("id", ""),
+            "title": (meeting.get("name") or "").strip() or "Untitled meeting",
+            "date": (meeting.get("createdAt") or "")[:10],
+            "duration": meeting.get("duration") or 0,
+            "attendees": [a.get("name") or a.get("email") or ""
+                          for a in meeting.get("attendees") or []],
+            "tags": list(meeting.get("tags") or []),
+            "synced": meeting.get("id", "") in held,
+        })
+    return rows

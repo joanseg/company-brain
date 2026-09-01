@@ -155,6 +155,16 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS meeting_queue (
+    meeting_id TEXT PRIMARY KEY,
+    title      TEXT NOT NULL DEFAULT '',
+    held_at    TEXT,
+    rel_path   TEXT NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'pending',
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS meeting_status ON meeting_queue(status);
 """
 
 
