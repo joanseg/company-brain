@@ -222,7 +222,11 @@ def meetings_list(days: int = 30, query: str | None = None) -> dict:
 def meetings_sync(meeting_ids: str) -> dict:
     payload = _parse(meeting_ids, "meeting_ids")
     if isinstance(payload, dict):
-        payload = payload.get("meeting_ids", [])
+        # An object without the wrapper key used to fall through as an empty
+        # selection and report success having synced nothing.
+        if "meeting_ids" not in payload:
+            raise ValueError('an object must wrap the ids under "meeting_ids"')
+        payload = payload["meeting_ids"]
     if not isinstance(payload, list):
         raise ValueError("meeting_ids must be a JSON array of meeting ids")
     with _conn() as conn:
@@ -247,7 +251,9 @@ def meetings_pull(limit: int = 5) -> dict:
 def meetings_push(results: str) -> dict:
     payload = _parse(results, "results")
     if isinstance(payload, dict):
-        payload = payload.get("results", [])
+        if "results" not in payload:
+            raise ValueError('an object must wrap the summaries under "results"')
+        payload = payload["results"]
     if not isinstance(payload, list):
         raise ValueError("results must be a JSON array of meeting results")
     with _conn() as conn:

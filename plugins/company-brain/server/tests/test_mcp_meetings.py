@@ -160,3 +160,25 @@ def test_meetings_push_rejects_a_bare_number():
 def test_meetings_sync_rejects_a_bare_number():
     with pytest.raises(ValueError):
         mcp_server.meetings_sync("5")
+
+
+def test_meetings_sync_rejects_an_object_without_the_wrapper_key(monkeypatch):
+    """It used to fall through as an empty selection: a clean success, nothing synced."""
+    def boom(conn, ids, opener=None):
+        raise AssertionError("must not sync on an unrecognised shape")
+
+    monkeypatch.setattr(meetings, "sync", boom)
+    with pytest.raises(ValueError):
+        mcp_server.meetings_sync('{"foo": 1}')
+
+
+def test_meetings_push_rejects_an_object_without_the_wrapper_key(monkeypatch):
+    """A single result object, unwrapped, used to report success having written
+    nothing — the summary the user watched a subagent produce silently lost.
+    """
+    def boom(conn, results):
+        raise AssertionError("must not push on an unrecognised shape")
+
+    monkeypatch.setattr(meetings, "push", boom)
+    with pytest.raises(ValueError):
+        mcp_server.meetings_push('{"meeting_id":"m1","summary":"s"}')
