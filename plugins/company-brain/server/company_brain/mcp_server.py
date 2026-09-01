@@ -246,6 +246,8 @@ def meetings_push(results: str) -> dict:
     payload = _parse(results, "results")
     if isinstance(payload, dict):
         payload = payload.get("results", [])
+    if payload is None:
+        raise ValueError("results must be a JSON array of meeting results")
     with _conn() as conn:
         return meetings.push(conn, payload)
 

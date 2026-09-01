@@ -134,3 +134,17 @@ def test_meetings_push_accepts_an_object_wrapping_the_results(monkeypatch):
 def test_meetings_push_rejects_malformed_json():
     with pytest.raises(ValueError):
         mcp_server.meetings_push("not json")
+
+
+def test_meetings_push_rejects_null():
+    with pytest.raises(ValueError):
+        mcp_server.meetings_push("null")
+
+
+def test_meetings_push_still_accepts_a_bare_string_pinning_safe_behaviour():
+    # A bare JSON string iterates as characters; meetings.push()'s per-item
+    # except routes each to "skipped" rather than raising. Pinned so a future
+    # guard on this tool does not over-reject a shape that currently works.
+    result = mcp_server.meetings_push('"m1"')
+    assert result["captured"] == 0
+    assert result["skipped"] == ["<unresolved result>", "<unresolved result>"]
