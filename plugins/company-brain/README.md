@@ -265,6 +265,7 @@ Read top to bottom, this is also the order you run them in.
 | `entity` | Queries the graph directly when your question names one thing. |
 | `search_themes` | Ranks the **cluster summaries** instead of passages. |
 | `/brain-add` | Writes new knowledge back as **markdown**. |
+| `/brain-meetings` | Lists Circleback meetings and syncs only the ones you pick, into a **`meeting-transcripts`** source with `enrich: false` — searchable, never in the entity graph. The summary it writes alongside is ordinary markdown, so it does enter the graph. |
 | `/brain-dream` | Reports contradictions, ageing facts and orphans. |
 | `/brain-view` | Opens the dashboard, including this explanation with diagrams. |
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+- `/brain-meetings` lists your Circleback meetings and syncs the ones you pick.
+  Nothing syncs automatically.
+- Transcripts land in `meeting-transcripts/` as their own source: searchable
+  verbatim, weighted below curated material, and never entity-extracted, so
+  they cannot distort the knowledge graph.
+- Summaries are written by subagents in your session and captured as ordinary
+  notes, so they carry full weight and full graph links.
+- Sources can now set `"enrich": false` to stay searchable without being
+  entity-extracted.
+- Set your key under Circleback API key in the plugin's settings.
+
 ## 0.3.0
 
 - **The How it works tab is now the full walkthrough.** Sixteen numbered

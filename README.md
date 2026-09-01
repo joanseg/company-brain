@@ -90,6 +90,7 @@ actually changed. Editing one file costs seconds, not a rebuild.
 | `/brain-index` | Refresh from disk, incrementally |
 | `/brain-enrich` | Build the entity and community layers |
 | `/brain-source` | List or add repositories |
+| `/brain-meetings` | List your Circleback meetings and sync the ones you pick. Needs a Circleback API key in the plugin's settings. Transcripts become searchable but never enter the knowledge graph; the summaries do |
 | `/brain-dream` | Contradictions, ageing facts, orphans — reports, never edits |
 | `/brain-view` | Open the dashboard |
 | `/brain-setup` | One-time environment install |
