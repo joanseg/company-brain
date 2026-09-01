@@ -294,7 +294,9 @@ def pull(conn: sqlite3.Connection, limit: int = 5) -> list[dict]:
     """Lease the next transcripts awaiting a summary.
 
     Held in an IMMEDIATE transaction so two callers cannot lease the same
-    meeting and write two summaries of it.
+    meeting and write two summaries of it. A row whose transcript file is gone
+    or unreadable is marked 'missing' and left out of the batch, rather than
+    handed to a subagent with nothing to summarise or retried forever.
     """
     reset_leases(conn)
     conn.execute("BEGIN IMMEDIATE")
@@ -311,40 +313,65 @@ def pull(conn: sqlite3.Connection, limit: int = 5) -> list[dict]:
     batch = []
     for row in rows:
         path = root / row["rel_path"]
+        try:
+            transcript = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            conn.execute("UPDATE meeting_queue SET status = 'missing', updated_at = ? "
+                         "WHERE meeting_id = ?", (_now(), row["meeting_id"]))
+            conn.commit()
+            continue
         batch.append({
             "meeting_id": row["meeting_id"],
             "title": row["title"],
             "held_at": row["held_at"],
-            "transcript": path.read_text(encoding="utf-8") if path.exists() else "",
+            "transcript": transcript,
         })
     return batch
 
 
 def push(conn: sqlite3.Connection, results: list[dict]) -> dict:
-    """Capture each summary as a note and close its queue row."""
+    """Capture each summary as a note and close its queue row.
+
+    Commits after each result, unlike `enrich.push()`'s single commit at the
+    end. `enrich.push()` is pure SQL, so a mid-loop exception rolls back
+    cleanly; here `capture.add()` writes a markdown file to disk, a side
+    effect no rollback can undo — without a commit per meeting, a later
+    result raising would revert an earlier meeting's row to 'leased' while
+    its note stays on disk, and it would be re-leased and re-captured as a
+    duplicate once the lease expires.
+
+    `results` is free-form subagent output, so a malformed fact or a bad
+    shape for one meeting is an ordinary input to route to `skipped`, not a
+    reason to abort the rest of the batch.
+    """
     stats: dict = {"captured": 0, "paths": [], "skipped": []}
-    known = {r["meeting_id"]: r for r in conn.execute(
-        "SELECT meeting_id, title, held_at FROM meeting_queue")}
+    known = {r["meeting_id"]: dict(r) for r in conn.execute(
+        "SELECT meeting_id, title, held_at, status FROM meeting_queue")}
 
     for result in results:
-        meeting_id = result.get("meeting_id")
-        summary = (result.get("summary") or "").strip()
-        if meeting_id not in known or not summary:
-            stats["skipped"].append(meeting_id)
-            continue
-        row = known[meeting_id]
-        written = capture.add(
-            conn, content=summary,
-            title="%s — %s" % (row["title"], row["held_at"] or "meeting"),
-            kind="meeting", tags=["meeting", "circleback"],
-            related=list(result.get("related") or []),
-            facts=list(result.get("facts") or []),
-            confidence="observed")
-        conn.execute("UPDATE meeting_queue SET status = 'done', updated_at = ? "
-                     "WHERE meeting_id = ?", (_now(), meeting_id))
-        stats["captured"] += 1
-        stats["paths"].append(written["relative"])
-    conn.commit()
+        meeting_id = None
+        try:
+            meeting_id = result.get("meeting_id")
+            summary = (result.get("summary") or "").strip()
+            row = known.get(meeting_id)
+            if row is None or row["status"] == "done" or not summary:
+                stats["skipped"].append(meeting_id or "<unresolved result>")
+                continue
+            written = capture.add(
+                conn, content=summary,
+                title="%s — %s" % (row["title"], row["held_at"] or "meeting"),
+                kind="meeting", tags=["meeting", "circleback"],
+                related=list(result.get("related") or []),
+                facts=list(result.get("facts") or []),
+                confidence="observed")
+            conn.execute("UPDATE meeting_queue SET status = 'done', updated_at = ? "
+                         "WHERE meeting_id = ?", (_now(), meeting_id))
+            conn.commit()
+            row["status"] = "done"
+            stats["captured"] += 1
+            stats["paths"].append(written["relative"])
+        except Exception:
+            stats["skipped"].append(meeting_id or "<unresolved result>")
     stats["pending"] = conn.execute(
         "SELECT COUNT(*) FROM meeting_queue WHERE status = 'pending'").fetchone()[0]
     return stats
