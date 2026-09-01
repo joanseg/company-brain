@@ -161,6 +161,7 @@ def status(conn: sqlite3.Connection) -> dict:
         "communities": one("SELECT COUNT(*) FROM communities"),
         "assertions": one("SELECT COUNT(*) FROM assertions"),
         "enrich_pending": one("SELECT COUNT(*) FROM enrich_queue WHERE status = 'pending'"),
+        "meetings_pending": one("SELECT COUNT(*) FROM meeting_queue WHERE status = 'pending'"),
         "by_source": [dict(r) for r in conn.execute(
             "SELECT s.name, s.weight, COUNT(DISTINCT d.id) AS documents, COUNT(c.id) AS chunks "
             "FROM sources s LEFT JOIN documents d ON d.source_id = s.id "
