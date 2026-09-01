@@ -6,8 +6,8 @@ live in their own source that is never entity-extracted; the summary a subagent
 writes from one is the knowledge, and it enters through `capture.add()` like any
 hand-written note.
 
-Circleback's own `notes` and `actionItems` are deliberately unused — the point is
-the brain's interpretation, not the vendor's.
+Circleback's own `notes`, `actionItems` and `insights` are deliberately unused —
+the point is the brain's interpretation, not the vendor's.
 
 The official CLI (`@circleback/cli`) is a thin JSON-RPC client over the same
 endpoint, so calling it directly keeps a Python plugin free of a Node dependency.
@@ -222,12 +222,28 @@ def _transcript_markdown(meeting: dict) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _unique_name(root, stem: str, meeting_id: str) -> str:
+    """Two meetings the same day with the same title are rare but real;
+    never let a later one overwrite an earlier one on disk.
+    """
+    name = stem + ".md"
+    if not (root / name).exists():
+        return name
+    base = "%s-%s" % (stem, slug(meeting_id)[:8] or "dup")
+    name = base + ".md"
+    ordinal = 2
+    while (root / name).exists():
+        name = "%s-%d.md" % (base, ordinal)
+        ordinal += 1
+    return name
+
+
 def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
     """Fetch and store only the meetings the user chose."""
     result: dict = {"synced": [], "skipped": [], "paths": []}
-    held = {r["meeting_id"] for r in conn.execute("SELECT meeting_id FROM meeting_queue")}
-    wanted = [mid for mid in meeting_ids if mid not in held]
-    result["skipped"] = [mid for mid in meeting_ids if mid in held]
+    already_synced = {r["meeting_id"] for r in conn.execute("SELECT meeting_id FROM meeting_queue")}
+    wanted = [mid for mid in meeting_ids if mid not in already_synced]
+    result["skipped"] = [mid for mid in meeting_ids if mid in already_synced]
     if not wanted:
         return result
 
@@ -238,22 +254,23 @@ def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
 
     for meeting in payload.get("meetings") or []:
         meeting_id = meeting.get("id", "")
-        if not meeting_id or meeting_id in held:
+        if not meeting_id or meeting_id in already_synced:
             continue
         title = (meeting.get("name") or "").strip() or "Untitled meeting"
         held_at = (meeting.get("createdAt") or "")[:10]
-        name = "%s-%s.md" % (held_at or "undated", slug(title)[:70] or "meeting")
-        if (root / name).exists():
-            # Two meetings the same day with the same name are rare but real;
-            # never let the second overwrite the first.
-            name = name[:-3] + "-" + slug(meeting_id)[:8] + ".md"
+        stem = "%s-%s" % (held_at or "undated", slug(title)[:70] or "meeting")
+        name = _unique_name(root, stem, meeting_id)
         (root / name).write_text(_transcript_markdown(meeting), encoding="utf-8")
         rel_path = "%s/%s" % (TRANSCRIPT_DIR, name)
         conn.execute(
             "INSERT INTO meeting_queue(meeting_id, title, held_at, rel_path, status, updated_at) "
             "VALUES(?,?,?,?,'pending',?)",
             (meeting_id, title, held_at, rel_path, _now()))
+        # Commit per meeting — and remember it locally — so a later failure in
+        # this same batch cannot roll back files already written to disk, and
+        # a duplicate id within one response is a no-op rather than a crash.
+        conn.commit()
+        already_synced.add(meeting_id)
         result["synced"].append(meeting_id)
         result["paths"].append(rel_path)
-    conn.commit()
     return result

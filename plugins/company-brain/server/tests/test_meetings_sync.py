@@ -1,4 +1,6 @@
 """Fetching chosen transcripts, writing them, and queueing them for summarising."""
+import json
+
 from company_brain import db, meetings
 
 TRANSCRIPTS = {"meetings": [{
@@ -93,3 +95,94 @@ def test_sync_of_nothing_touches_nothing(tmp_path, monkeypatch):
 
 def _must_not_call():
     raise AssertionError("_call must not run when no meetings are chosen")
+
+
+def test_sync_registers_the_transcripts_source(tmp_path, monkeypatch):
+    """Guards the `ensure_sources()` call itself — deleting it must not double-index
+    every transcript into the anchor at full weight with enrichment on.
+    """
+    conn = _conn(tmp_path, monkeypatch)
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
+    meetings.sync(conn, ["m1"])
+
+    config = json.loads(db.sources_path().read_text())["sources"]
+    names = [s["name"] for s in config]
+    assert meetings.TRANSCRIPT_SOURCE in names
+    assert meetings.TRANSCRIPT_DIR in config[0]["exclude"]
+    conn.close()
+
+
+def test_three_meetings_same_date_and_title_get_distinct_files(tmp_path, monkeypatch):
+    triple = {"meetings": [
+        {**TRANSCRIPTS["meetings"][0], "id": "m1"},
+        {**TRANSCRIPTS["meetings"][0], "id": "m2"},
+        {**TRANSCRIPTS["meetings"][0], "id": "m3"},
+    ]}
+    conn = _conn(tmp_path, monkeypatch)
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: triple)
+    result = meetings.sync(conn, ["m1", "m2", "m3"])
+
+    assert len(result["paths"]) == 3
+    assert len(set(result["paths"])) == 3
+    folder = tmp_path / meetings.TRANSCRIPT_DIR
+    assert len(list(folder.glob("*.md"))) == 3
+    conn.close()
+
+
+def test_mixed_batch_of_held_and_new(tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
+    meetings.sync(conn, ["m1"])
+
+    second_meeting = {**TRANSCRIPTS["meetings"][0], "id": "m2", "name": "Roadmap sync"}
+    seen = {}
+
+    def fake_call(tool, args, opener=None):
+        seen["ids"] = args["meetingIds"]
+        return {"meetings": [second_meeting]}
+
+    monkeypatch.setattr(meetings, "_call", fake_call)
+    result = meetings.sync(conn, ["m1", "m2"])
+
+    assert result["synced"] == ["m2"]
+    assert result["skipped"] == ["m1"]
+    assert len(result["paths"]) == 1
+    assert seen["ids"] == ["m2"]
+    conn.close()
+
+
+def test_partial_response_ignores_missing_and_idless_meetings(tmp_path, monkeypatch):
+    """"m2" is requested but never comes back; the one meeting that does come
+    back has no id. Neither may leave a file, a row, or a `synced` entry.
+    """
+    idless = {**TRANSCRIPTS["meetings"][0], "id": ""}
+    conn = _conn(tmp_path, monkeypatch)
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: {"meetings": [idless]})
+
+    result = meetings.sync(conn, ["m1", "m2"])
+
+    assert result["synced"] == []
+    assert result["skipped"] == []
+    assert result["paths"] == []
+    folder = tmp_path / meetings.TRANSCRIPT_DIR
+    assert list(folder.glob("*.md")) == []
+    assert conn.execute("SELECT COUNT(*) FROM meeting_queue").fetchone()[0] == 0
+    conn.close()
+
+
+def test_duplicate_id_in_one_response_is_a_noop_not_a_crash(tmp_path, monkeypatch):
+    """Regression for the reviewer's finding: a response repeating the same id
+    used to write two files and then crash on the second INSERT.
+    """
+    duplicated = {"meetings": [TRANSCRIPTS["meetings"][0], TRANSCRIPTS["meetings"][0]]}
+    conn = _conn(tmp_path, monkeypatch)
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: duplicated)
+
+    result = meetings.sync(conn, ["m1"])
+
+    assert result["synced"] == ["m1"]
+    assert len(result["paths"]) == 1
+    folder = tmp_path / meetings.TRANSCRIPT_DIR
+    assert len(list(folder.glob("*.md"))) == 1
+    assert conn.execute("SELECT COUNT(*) FROM meeting_queue").fetchone()[0] == 1
+    conn.close()
