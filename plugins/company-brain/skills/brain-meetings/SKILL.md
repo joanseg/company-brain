@@ -16,14 +16,18 @@ brain is usually a git repository.
 1. Call `meetings_list` with `days` (default 30) and any search term the user
    gave. If `count` is 0, say so and stop.
 2. Print a numbered table: number, date, title, duration in minutes, attendees,
-   tags. Mark meetings whose `synced` is true as already held and do not offer
-   them.
+   tags. Number only the meetings still open to sync; list any whose `synced`
+   is true separately, marked as already held, with no number of their own —
+   so every number in the table is one the user can actually pick.
 3. Ask which to sync. Accept `1,3,7-9`, `all`, `none`, or a name or date
    fragment. Use a printed table and a free-text reply rather than
    AskUserQuestion — a 30-day window routinely exceeds its four-option limit.
 4. Resolve the selection to ids and read them back to the user before syncing.
-   `none` is a valid answer: confirm and stop, leaving no trace.
-5. Call `meetings_sync` with the chosen ids as a JSON array.
+   If a fragment or any part of the selection matches more than one row, or
+   matches none, list what it matched and ask again rather than guessing —
+   never resolve an ambiguous selection on the user's behalf. `none` is a
+   valid answer: confirm and stop, leaving no trace.
+5. Call `meetings_sync` with the chosen ids as a JSON string.
 6. Call `reindex` so the transcripts become searchable.
 
 ## Phase 2 — summarise
@@ -32,7 +36,8 @@ Repeat until `pending` reaches 0.
 
 1. Call `meetings_pull` (default limit 5). If `count` is 0, phase 2 is done.
 2. Dispatch one subagent per meeting **in a single message** so they run
-   concurrently. Give each the full transcript and this contract:
+   concurrently. Give each the transcript carried by its item in the `batch`
+   `meetings_pull` returned, and this contract:
 
    > You are given one meeting transcript. Write a comprehensive summary of what
    > actually happened in it. Return ONLY a JSON object:
@@ -46,9 +51,10 @@ Repeat until `pending` reaches 0.
    > Rules: every action item goes in `facts` as `action:: ...`, one per commitment
    > actually made — not implied. Use `decision:: ...` for decisions reached.
    > Name people as the transcript names them. Do not invent attendees, dates or
-   > commitments, and do not bring in knowledge from outside the transcript. A
-   > meeting with no actions returns an empty `facts` array — that is a valid
-   > answer.
+   > commitments, and do not bring in knowledge from outside the transcript. Name
+   > entities in `related` as the transcript names them too — do not invent ones
+   > it doesn't mention. A meeting with no actions returns an empty `facts`
+   > array — that is a valid answer.
 
 3. Validate: it must parse as JSON and every `meeting_id` must be one you handed
    out. Drop anything that fails rather than pushing it.
