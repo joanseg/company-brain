@@ -1,0 +1,70 @@
+---
+name: brain-meetings
+description: List Circleback meetings, sync the ones the user picks, and write comprehensive summaries into the company brain. Use when the user runs /brain-meetings, asks to pull in meeting notes or transcripts, or when brain status reports outstanding meetings_pending work.
+---
+
+# Bringing meetings into the brain
+
+Invoked as `/brain-meetings`. Two phases: choose, then summarise.
+
+Nothing is ever synced automatically. The user's selection is the only thing
+that puts a meeting in the brain, because transcripts are searchable and this
+brain is usually a git repository.
+
+## Phase 1 — choose
+
+1. Call `meetings_list` with `days` (default 30) and any search term the user
+   gave. If `count` is 0, say so and stop.
+2. Print a numbered table: number, date, title, duration in minutes, attendees,
+   tags. Mark meetings whose `synced` is true as already held and do not offer
+   them.
+3. Ask which to sync. Accept `1,3,7-9`, `all`, `none`, or a name or date
+   fragment. Use a printed table and a free-text reply rather than
+   AskUserQuestion — a 30-day window routinely exceeds its four-option limit.
+4. Resolve the selection to ids and read them back to the user before syncing.
+   `none` is a valid answer: confirm and stop, leaving no trace.
+5. Call `meetings_sync` with the chosen ids as a JSON array.
+6. Call `reindex` so the transcripts become searchable.
+
+## Phase 2 — summarise
+
+Repeat until `pending` reaches 0.
+
+1. Call `meetings_pull` (default limit 5). If `count` is 0, phase 2 is done.
+2. Dispatch one subagent per meeting **in a single message** so they run
+   concurrently. Give each the full transcript and this contract:
+
+   > You are given one meeting transcript. Write a comprehensive summary of what
+   > actually happened in it. Return ONLY a JSON object:
+   > `{"meeting_id": "<copied exactly>",
+   >   "summary": "<250-500 words in markdown: what was discussed, what was
+   >     decided and by whom, what was disagreed on, what is still open. Use
+   >     headings if it helps. Ground every claim in the transcript.>",
+   >   "facts": ["action:: <who> to <what>, by <when if stated>"],
+   >   "related": ["<entity named in the meeting>"]}`
+   >
+   > Rules: every action item goes in `facts` as `action:: ...`, one per commitment
+   > actually made — not implied. Use `decision:: ...` for decisions reached.
+   > Name people as the transcript names them. Do not invent attendees, dates or
+   > commitments, and do not bring in knowledge from outside the transcript. A
+   > meeting with no actions returns an empty `facts` array — that is a valid
+   > answer.
+
+3. Validate: it must parse as JSON and every `meeting_id` must be one you handed
+   out. Drop anything that fails rather than pushing it.
+4. Call `meetings_push` with the concatenated array as a JSON string.
+5. **Show the user each summary** as well as storing it, then report the file
+   paths and remaining `pending`.
+6. Call `reindex` once the queue is empty so the new notes are searchable.
+
+## Notes
+
+Circleback's own AI notes and action items are deliberately not used — the
+summary is the brain's own reading of the transcript.
+
+Transcripts live in `meeting-transcripts/` as their own low-weight source that is
+never entity-extracted, so they are searchable verbatim without distorting the
+graph. The summaries are ordinary captured notes and carry full weight.
+
+Re-running is safe: a meeting already held is skipped, and an interrupted
+summarising run returns its leases to the queue after 30 minutes.
