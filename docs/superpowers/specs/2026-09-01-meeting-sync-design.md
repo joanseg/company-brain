@@ -15,8 +15,8 @@ that, but a webhook needs a public, always-on endpoint, and this plugin's only
 server (`webui.py`) is loopback-pinned and dies with the Claude Code session.
 Every webhook design therefore requires each user to own infrastructure.
 
-Circleback also exposes the same data by pull, which needs none. That is what
-this spec builds.
+Circleback also exposes the same data by pull, which needs none. That is what this
+spec builds.
 
 ## Decisions
 
@@ -32,9 +32,9 @@ calls are ~30 lines of stdlib `urllib.request`, so the plugin calls the endpoint
 itself and adds no dependency to `server/pyproject.toml`.
 
 This deviates from the CLI route approved during brainstorming. It is the same
-route — pull, API key, same endpoint, same tools — minus the Node hop. The
-adapter is isolated behind one function so swapping to `subprocess` calling
-`cb --json` is a contained change if preferred.
+route — pull, API key, same endpoint, same tools — minus the Node hop. The adapter
+is isolated behind two functions so swapping to `subprocess` calling `cb --json` is
+a contained change if preferred.
 
 ### D2 — Pull, not webhook
 
@@ -44,8 +44,8 @@ public plugin deploying and maintaining a service). Pull never misses a meeting,
 holds no secret in transit, verifies no signature, and backfills history a webhook
 could never supply.
 
-Cost, stated plainly: not real-time. A meeting lands next time the user runs
-`/brain-meetings` or opens a session.
+Cost, stated plainly: not real-time. Nothing enters the brain until the user asks
+for it. Under D6 that is the intended behaviour rather than a limitation.
 
 ### D3 — Transcripts are indexed and searchable
 
@@ -101,26 +101,47 @@ The user asked for the brain's interpretation, not the vendor's.
 `${user_config.*}`. That is the plugin's existing per-user configuration surface
 and is what "set up by each user" means here. No new mechanism.
 
-### D6 — Opt-in by tag, defaulting to nothing
+One key only: `circleback_api_key`. There is no tag filter, no sync window, and no
+schedule to configure — D6 removes the need for all three.
 
-`meeting_tags` defaults to empty, and empty means sync nothing. A public plugin
-that silently pulls every meeting a user has ever had into a git-committed
-repository on first run is not an acceptable default. The user opts in per tag.
+### D6 — Nothing syncs without being chosen
+
+`/brain-meetings` never syncs on its own. It lists what Circleback has and asks
+which meetings to take. Selection is the whole control surface.
+
+This replaces an earlier design where a configured tag list drove an automatic
+sync. Explicit choice is better on three counts: a public plugin never pulls a
+meeting the user did not ask for, there is no default that is wrong for somebody,
+and the user sees what they are about to ingest before it lands in a
+git-committed repository.
+
+It also deletes machinery. With no automatic sync there is no watermark to
+maintain: `meeting_queue` is keyed by `meeting_id`, so "already synced" is simply
+whether a row exists. No cursor, no `circleback_cursor` meta key, no
+advance-on-success/hold-on-failure logic, and no class of bug where a crash skips
+a meeting forever.
 
 ## Architecture
 
 ```
-Circleback /api/mcp
-        │  SearchMeetings + GetTranscriptsForMeetings
-        ▼
-   meetings.sync()
-        │
+                    /brain-meetings
+                          │
+                          ▼
+              meetings.list(days, query)          SearchMeetings
+                          │
+                          ▼
+        numbered table, already-synced rows marked
+                          │
+                    user picks: "1,3,7-9" / "all" / "none"
+                          │
+                          ▼
+              meetings.sync(conn, ids)            GetTranscriptsForMeetings
+                          │
         ├──► meeting-transcripts/*.md     own source, weight 0.4, enrich false
         │            └──► indexed: FTS5 + dense, searchable verbatim, never a graph hub
         │
         └──► meeting_queue (pending)
                      │
-              /brain-meetings
                      │  meetings.pull() leases a batch
                      ▼
               subagent reads one transcript
@@ -138,28 +159,28 @@ note.
 
 ### `server/company_brain/meetings.py` (new)
 
-- `fetch(since: str | None, tags: list[str]) -> list[dict]` — the only code that
-  knows Circleback exists. POSTs JSON-RPC `tools/call` to
-  `https://circleback.ai/api/mcp`. Handles both `application/json` and
-  `text/event-stream` responses, because the endpoint may return either. Reads
-  `CIRCLEBACK_API_KEY`; raises a message naming
+- `_call(tool, args) -> dict` — the only code that knows Circleback exists. POSTs
+  JSON-RPC `tools/call` to `https://circleback.ai/api/mcp`. Handles both
+  `application/json` and `text/event-stream` responses, because the endpoint may
+  return either. Reads `CIRCLEBACK_API_KEY`; raises a message naming
   `https://circleback.ai/settings?tab=api-access` when unset.
-- `sync(conn) -> dict` — calls `fetch`, writes each transcript to the transcripts
-  source, inserts a `meeting_queue` row, advances the cursor. The cursor advances
-  only after a transcript file is written, so a crash re-pulls rather than skips.
+- `list(conn, days=30, query=None) -> list[dict]` — `SearchMeetings` over a date
+  window, returning id, title, date, duration, attendees, tags, and a `synced`
+  flag set from `meeting_queue`. Read-only: writes nothing, so the user can browse
+  freely.
+- `sync(conn, meeting_ids) -> dict` — `GetTranscriptsForMeetings` for the chosen
+  ids only. Writes each transcript to the transcripts source and inserts a
+  `meeting_queue` row. Ids already present are skipped, so re-selecting a synced
+  meeting is a no-op rather than a duplicate.
 - `pull(conn, limit) -> list[dict]` — leases pending meetings inside a
   `BEGIN IMMEDIATE` with a 30-minute expiry, mirroring `enrich.pull` exactly.
 - `push(conn, results) -> dict` — calls `capture.add(kind="meeting", ...)` for each
   summary, closes the queue row.
 
-Cursor stored via `db.set_meta(conn, "circleback_cursor", iso8601)`.
-
 ### `db.py` changes
 
-Beyond the schema below: `load_sources()` carries an `enrich` key (default `True`),
-`save_sources()` persists it, and `_migrate()` adds the `sources.enrich` column.
-
-### Schema (`db.py`)
+`load_sources()` carries an `enrich` key (default `True`), `save_sources()`
+persists it, and `_migrate()` adds the `sources.enrich` column.
 
 ```sql
 CREATE TABLE IF NOT EXISTS meeting_queue (
@@ -181,7 +202,7 @@ column needs `_migrate()`.
 The transcripts source root sits **inside** the anchor source root, which is `.`.
 Left alone the anchor would index every transcript a second time — at weight 1.0
 and with enrichment on — silently defeating D3a. So registration is two writes to
-`sources.json`, not one, and `sync()` performs both before its first fetch:
+`sources.json`, not one, and `sync()` performs both before its first write:
 
 1. Append the transcripts source: `{"name": "meeting-transcripts", "root":
    "meeting-transcripts", "weight": 0.4, "enrich": false}`.
@@ -206,73 +227,81 @@ currently drops, and `indexer._upsert_source()` must write the column on the
 
 `meeting-transcripts/YYYY-MM-DD-<slug>.md`, frontmatter carrying `type: transcript`,
 `created`, `attendees`, and a `reference::` back to the Circleback meeting URL.
-Written directly rather than through `capture.add()`, deliberately: `capture`
-runs `_inferred_links()`, whose own comment warns against creating noisy hubs, and
-a transcript mentions nearly every entity.
+Written directly rather than through `capture.add()`, deliberately: `capture` runs
+`_inferred_links()`, whose own comment warns against creating noisy hubs, and a
+transcript mentions nearly every entity.
 
 ### MCP tools (`mcp_server.py`)
 
-`meetings_sync`, `meetings_pull`, `meetings_push` — same shapes as the existing
-`enrich_pull` / `enrich_push`. `status` gains `meetings_pending`.
+`meetings_list`, `meetings_sync`, `meetings_pull`, `meetings_push`. The last two
+have the same shapes as the existing `enrich_pull` / `enrich_push`. `status` gains
+`meetings_pending`.
 
 ### Skill and command
 
-`skills/brain-meetings/SKILL.md` mirrors `brain-enrich`: pull a batch, one subagent
-per meeting, each returns a comprehensive summary, action items as
-`- action:: <text>` structured facts, and related entities. `push` captures them,
-then reindex.
+`commands/brain-meetings.md` drives the two-phase flow:
 
-`commands/brain-meetings.md` is the entry point. It prints each summary back in
-session as well as storing it.
+1. Call `meetings_list`. Print a numbered table — date, title, duration,
+   attendees, tags — with already-synced rows marked and not offered again.
+2. Ask which to sync. Accept `1,3,7-9`, `all`, `none`, or a date/name substring.
+   A free-text numbered selection rather than `AskUserQuestion`, because a
+   30-day window routinely exceeds that tool's four-option limit.
+3. Call `meetings_sync` with the chosen ids.
+4. Hand off to `skills/brain-meetings/SKILL.md`, which mirrors `brain-enrich`:
+   pull a batch, one subagent per meeting, each returning a comprehensive summary,
+   action items as `- action:: <text>` structured facts, and related entities.
+   `push` captures them, then reindex.
+5. Print each summary back in session as well as storing it.
 
-### Config
-
-`plugin.json` `userConfig` gains `circleback_api_key` and `meeting_tags`, wired
-through `.mcp.json` as `CIRCLEBACK_API_KEY` and `COMPANY_BRAIN_MEETING_TAGS`.
+Selecting nothing is a supported outcome and leaves no trace.
 
 ### SessionStart hook
 
-`hooks/staleness.sh` gains a pending-meeting count, guarded so a database
-predating this feature reports nothing. Report, never act — matching the existing
-behaviour of that script.
+`hooks/staleness.sh` gains a count of transcripts fetched but not yet summarised,
+guarded so a database predating this feature reports nothing. Report, never act —
+matching the existing behaviour of that script. It does **not** mention unsynced
+Circleback meetings: that would require a network call in a session hook.
 
 ## Error handling
 
 | Condition | Behaviour |
 |---|---|
-| `CIRCLEBACK_API_KEY` unset | Named error pointing at the settings URL. No partial write. |
-| 401 / 403 | Surface Circleback's message; cursor unchanged. |
-| 429 or network failure | Abort the sync, leave the cursor where it was, report how many meetings were written before the failure. |
+| `CIRCLEBACK_API_KEY` unset | Named error pointing at the settings URL. `list` and `sync` both refuse; nothing partial. |
+| 401 / 403 | Surface Circleback's message unchanged. |
+| 429 or network failure during `list` | Report and stop. Nothing was written, so there is nothing to unwind. |
+| 429 or network failure during `sync` | Meetings already written keep their queue rows and stay valid; report which ids did not make it so the user can re-select them. |
+| Meeting id already in `meeting_queue` | Skipped silently; re-selecting is a no-op, never a duplicate file. |
 | Subagent returns unusable JSON | That meeting's lease expires and returns to `pending`; others in the batch still commit. |
-| Transcript write fails | Cursor not advanced; the meeting is re-pulled next run. |
+| Transcript write fails | No queue row is inserted, so the meeting simply reappears in the next listing as unsynced. |
 
 ## Testing
 
 `server/tests/test_meetings.py`, following `conftest.py`'s temp-dir pattern:
 
-- `fetch` parses both JSON and SSE response bodies, against captured fixtures.
+- `_call` parses both JSON and SSE response bodies, against captured fixtures.
+- `list` marks meetings already in `meeting_queue` as synced.
+- Selection parsing: `1,3,7-9`, `all`, `none`, out-of-range and malformed input.
+- `sync` of an id already queued writes no second file and no second row.
 - Transcript file shape: path, frontmatter, `reference::`.
 - Queue transitions: `pending → leased → done`; expired leases return to `pending`.
-- Cursor advances on success, holds on failure.
-- **Regression that matters:** chunks belonging to an `enrich: false` source never
-  appear in `enrich_queue` after `indexer.refresh()`.
-- Existing databases migrate: a `sources` table without `enrich` gains it and
-  defaults to enriched.
-- Registration is idempotent: running `sync()` twice leaves exactly one
-  transcripts source and one `meeting-transcripts` exclude entry.
 - **The double-index regression:** after registration, a file under
   `meeting-transcripts/` produces documents for the `meeting-transcripts` source
   only, never for the anchor source. This is the test that would have caught the
   segment-matching bug in `ingest.walk()`.
+- Registration is idempotent: running `sync()` twice leaves exactly one
+  transcripts source and one `meeting-transcripts` exclude entry.
+- Existing databases migrate: a `sources` table without `enrich` gains it and
+  defaults to enriched.
 
 No network in tests; the HTTP call is injected.
 
 ## Non-goals
 
 - Webhooks, tunnels, relays, and any always-on listener.
+- Automatic or scheduled syncing of any kind.
 - Circleback's `notes`, `actionItems` and `insights` fields — superseded by D4.
 - Recording or audio. `recordingUrl` expires in 24 hours and is not stored.
-- Meeting tools other than Circleback. The `fetch()` boundary is where a second
+- Meeting tools other than Circleback. The `_call()` boundary is where a second
   adapter would attach; none is built.
 
 ## Open items for build time
