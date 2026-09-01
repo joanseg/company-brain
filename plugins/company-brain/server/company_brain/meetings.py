@@ -364,6 +364,11 @@ def pull(conn: sqlite3.Connection, limit: int = 5) -> list[dict]:
     return batch
 
 
+def _skipped(meeting_id, reason: str) -> str:
+    """One printable line per dropped result: which meeting, and why."""
+    return "%s: %s" % (meeting_id or "<unresolved result>", reason)
+
+
 def push(conn: sqlite3.Connection, results: list[dict]) -> dict:
     """Capture each summary as a note and close its queue row.
 
@@ -389,8 +394,14 @@ def push(conn: sqlite3.Connection, results: list[dict]) -> dict:
             meeting_id = result.get("meeting_id")
             summary = (result.get("summary") or "").strip()
             row = known.get(meeting_id)
-            if row is None or row["status"] == "done" or not summary:
-                stats["skipped"].append(meeting_id or "<unresolved result>")
+            if row is None:
+                stats["skipped"].append(_skipped(meeting_id, "not in the meeting queue"))
+                continue
+            if row["status"] == "done":
+                stats["skipped"].append(_skipped(meeting_id, "already captured"))
+                continue
+            if not summary:
+                stats["skipped"].append(_skipped(meeting_id, "empty summary"))
                 continue
             written = capture.add(
                 conn, content=summary,
@@ -405,8 +416,12 @@ def push(conn: sqlite3.Connection, results: list[dict]) -> dict:
             row["status"] = "done"
             stats["captured"] += 1
             stats["paths"].append(written["relative"])
-        except Exception:
-            stats["skipped"].append(meeting_id or "<unresolved result>")
+        except Exception as exc:
+            # Named, not swallowed: a meeting that fails silently is re-leased
+            # when its lease expires and fails identically forever, while the
+            # skill reports a summary the user never received.
+            stats["skipped"].append(
+                _skipped(meeting_id, "%s: %s" % (type(exc).__name__, str(exc)[:200])))
     stats["pending"] = conn.execute(
         "SELECT COUNT(*) FROM meeting_queue WHERE status = 'pending'").fetchone()[0]
     return stats

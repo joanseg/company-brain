@@ -62,7 +62,10 @@ Repeat until `pending` reaches 0.
    out. Drop anything that fails rather than pushing it.
 4. Call `meetings_push` with the concatenated array as a JSON string.
 5. **Show the user each summary** as well as storing it, then report the file
-   paths and remaining `pending`.
+   paths. Report every entry in `skipped` verbatim as well — each names a
+   meeting and why it was dropped. A skipped meeting has no summary, so never
+   count it as one: its lease returns to the queue after 30 minutes, and one
+   that fails the same way twice needs the user, not another retry.
 6. Call `reindex` once the queue is empty so the new notes are searchable.
 
 ## Notes

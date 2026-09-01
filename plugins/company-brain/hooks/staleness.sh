@@ -23,10 +23,13 @@ if [ "$stale" -gt 0 ]; then
   echo "company-brain: ${stale} markdown file(s) changed since the last index — run /brain-index"
 fi
 
-# Meetings fetched but not yet summarised. Guarded: databases predating this
-# feature have no meeting_queue, and this script reports rather than acts.
+# Meetings fetched but not yet summarised. 'leased' counts too: a session is
+# starting, so no lease is legitimately in flight, and a meeting whose summary
+# failed would otherwise be invisible to every counter. Guarded: databases
+# predating this feature have no meeting_queue, and this script reports rather
+# than acts.
 meetings=$(sqlite3 "$STATE/brain.db" \
-  "SELECT COUNT(*) FROM meeting_queue WHERE status = 'pending';" 2>/dev/null || echo 0)
+  "SELECT COUNT(*) FROM meeting_queue WHERE status IN ('pending','leased');" 2>/dev/null || echo 0)
 if [ "${meetings:-0}" -gt 0 ]; then
   echo "company-brain: ${meetings} synced meeting(s) awaiting a summary — run /brain-meetings"
 fi

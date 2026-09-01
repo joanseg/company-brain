@@ -88,7 +88,7 @@ def test_push_skips_an_unknown_meeting_id(tmp_path, monkeypatch):
     conn = _seed(tmp_path, monkeypatch)
     stats = meetings.push(conn, [{"meeting_id": "nope", "summary": "x", "facts": [], "related": []}])
     assert stats["captured"] == 0
-    assert stats["skipped"] == ["nope"]
+    assert stats["skipped"] == ["nope: not in the meeting queue"]
     conn.close()
 
 
@@ -98,7 +98,7 @@ def test_push_leaves_the_row_pending_when_the_summary_is_empty(tmp_path, monkeyp
     stats = meetings.push(conn, [{"meeting_id": "m1", "summary": "   ", "facts": [], "related": []}])
 
     assert stats["captured"] == 0
-    assert stats["skipped"] == ["m1"]
+    assert stats["skipped"] == ["m1: empty summary"]
     assert conn.execute(
         "SELECT status FROM meeting_queue WHERE meeting_id='m1'").fetchone()[0] == "leased"
     conn.close()
@@ -117,7 +117,12 @@ def test_push_commits_each_meeting_before_a_later_malformed_one_can_undo_it(tmp_
     ])
 
     assert stats["captured"] == 1
-    assert stats["skipped"] == ["m2"]
+    # The reason travels with the id: without it the skill reports pending 0,
+    # declares phase 2 done, and the meeting is re-leased and fails identically
+    # every 30 minutes without ever being named.
+    assert len(stats["skipped"]) == 1
+    assert stats["skipped"][0].startswith("m2: ")
+    assert "predicate:: value" in stats["skipped"][0]
 
     # Reconnect: an uncommitted row would look 'done' on the same connection,
     # which is exactly what would hide a missing per-meeting commit.
@@ -157,7 +162,7 @@ def test_push_skips_a_meeting_already_captured(tmp_path, monkeypatch):
 
     assert first["captured"] == 1
     assert second["captured"] == 0
-    assert second["skipped"] == ["m1"]
+    assert second["skipped"] == ["m1: already captured"]
     notes = list((tmp_path / "memory" / "inbox").glob("*.md"))
     assert len(notes) == 1
     conn.close()
