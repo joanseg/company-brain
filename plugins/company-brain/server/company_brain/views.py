@@ -74,8 +74,12 @@ def overview(conn: sqlite3.Connection) -> dict:
         "enrich_pending": one("SELECT COUNT(*) FROM enrich_queue WHERE status = 'pending'"),
         "unembedded": one("SELECT COUNT(DISTINCT sha) FROM chunks "
                           "WHERE sha NOT IN (SELECT sha FROM vectors)"),
+        # A document in a source with enrich off can never have mentions — that
+        # is what the flag is for. Counting those would raise a red flag no
+        # amount of /brain-enrich could ever clear.
         "documents_without_entities": one(
-            "SELECT COUNT(*) FROM documents d WHERE NOT EXISTS ("
+            "SELECT COUNT(*) FROM documents d JOIN sources s ON s.id = d.source_id "
+            "WHERE s.enrich = 1 AND NOT EXISTS ("
             "  SELECT 1 FROM chunks c JOIN mentions m ON m.chunk_id = c.id WHERE c.doc_id = d.id)"),
         "summaries_missing": one(
             "SELECT COUNT(*) FROM communities c WHERE NOT EXISTS ("
