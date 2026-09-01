@@ -1,4 +1,6 @@
 """Listing shows what Circleback has and marks what the brain already holds."""
+from datetime import datetime, timedelta, timezone
+
 from company_brain import db, meetings
 
 PAYLOAD = {"meetings": [
@@ -44,9 +46,24 @@ def test_list_passes_a_start_date_and_search_term(empty_conn, monkeypatch):
     monkeypatch.setattr(meetings, "_call", fake_call)
     meetings.list_meetings(empty_conn, days=7, query="pricing")
 
+    expected_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     assert seen["tool"] == "SearchMeetings"
     assert seen["args"]["searchTerm"] == "pricing"
-    assert "startDate" in seen["args"]
+    assert seen["args"]["startDate"] == expected_start
+
+
+def test_list_defaults_to_a_thirty_day_window(empty_conn, monkeypatch):
+    seen = {}
+
+    def fake_call(tool, args, opener=None):
+        seen["args"] = args
+        return {"meetings": []}
+
+    monkeypatch.setattr(meetings, "_call", fake_call)
+    meetings.list_meetings(empty_conn)
+
+    expected_start = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
+    assert seen["args"]["startDate"] == expected_start
 
 
 def test_list_tolerates_a_meeting_with_no_name(empty_conn, monkeypatch):
@@ -55,3 +72,17 @@ def test_list_tolerates_a_meeting_with_no_name(empty_conn, monkeypatch):
     rows = meetings.list_meetings(empty_conn)
     assert rows[0]["title"] == "Untitled meeting"
     assert rows[0]["date"] == ""
+
+
+def test_list_prefers_attendee_name_then_falls_back_to_email(empty_conn, monkeypatch):
+    payload = {"meetings": [{
+        "id": "m4", "name": "Kickoff", "createdAt": "2026-08-22T10:00:00Z",
+        "attendees": [
+            {"name": "Joan", "email": "joan@example.com"},
+            {"email": "no-name@example.com"},
+            {},
+        ],
+    }]}
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: payload)
+    rows = meetings.list_meetings(empty_conn)
+    assert rows[0]["attendees"] == ["Joan", "no-name@example.com", ""]

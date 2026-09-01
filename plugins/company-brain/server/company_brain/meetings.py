@@ -129,7 +129,7 @@ def _now() -> str:
 
 
 def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = None,
-                  opener=None) -> list[dict]:
+                 opener=None) -> list[dict]:
     """What Circleback has in the window, with what the brain already holds marked.
 
     Read-only on purpose: browsing must never write, so the user can look before
