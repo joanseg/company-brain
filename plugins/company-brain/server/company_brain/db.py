@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS sources (
     name     TEXT UNIQUE NOT NULL,
     root     TEXT NOT NULL,
     weight   REAL NOT NULL DEFAULT 1.0,
+    enrich   INTEGER NOT NULL DEFAULT 1,
     added_at TEXT NOT NULL
 );
 
@@ -179,7 +180,8 @@ def connect() -> sqlite3.Connection:
 
 def _migrate(conn: sqlite3.Connection) -> None:
     """Additive column migrations for databases built by an earlier version."""
-    for table, column, decl in (("community_summaries", "vec", "BLOB"),):
+    for table, column, decl in (("community_summaries", "vec", "BLOB"),
+                                ("sources", "enrich", "INTEGER NOT NULL DEFAULT 1")):
         existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
@@ -233,6 +235,7 @@ def load_sources() -> list[dict]:
             "name": entry["name"],
             "root": root,
             "weight": float(entry.get("weight", 1.0)),
+            "enrich": bool(entry.get("enrich", True)),
             "exclude": DEFAULT_EXCLUDES + list(entry.get("exclude", [])),
         })
     return resolved
@@ -252,6 +255,7 @@ def save_sources(sources: list[dict]) -> None:
             "name": s["name"],
             "root": str(s["root"]),
             "weight": s["weight"],
+            "enrich": bool(s.get("enrich", True)),
             "exclude": [e for e in s.get("exclude", []) if e not in DEFAULT_EXCLUDES],
         }
         for s in sources
