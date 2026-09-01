@@ -9,7 +9,8 @@
       "env": {
         "COMPANY_BRAIN_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
         "COMPANY_BRAIN_EMBED_MODEL": "${user_config.embedding_model}",
-        "COMPANY_BRAIN_VIEW_PORT": "${user_config.view_port}"
+        "COMPANY_BRAIN_VIEW_PORT": "${user_config.view_port}",
+        "CIRCLEBACK_API_KEY": "${user_config.circleback_api_key}"
       }
     }
   }

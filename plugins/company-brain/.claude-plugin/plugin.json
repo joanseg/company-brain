@@ -34,6 +34,12 @@
       "title": "Dashboard port",
       "description": "Localhost port for the read-only brain dashboard.",
       "default": 4717
+    },
+    "circleback_api_key": {
+      "type": "string",
+      "title": "Circleback API key",
+      "description": "Create one at https://circleback.ai/settings?tab=api-access. Required only for /brain-meetings; the rest of the brain works without it.",
+      "default": ""
     }
   }
 }
