@@ -89,7 +89,7 @@ def test_sync_of_nothing_touches_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(meetings, "_call",
                         lambda tool, args, opener=None: _must_not_call())
     result = meetings.sync(conn, [])
-    assert result == {"synced": [], "skipped": [], "paths": []}
+    assert result == {"synced": [], "skipped": [], "paths": [], "not_returned": []}
     conn.close()
 
 
@@ -164,6 +164,9 @@ def test_partial_response_ignores_missing_and_idless_meetings(tmp_path, monkeypa
     assert result["synced"] == []
     assert result["skipped"] == []
     assert result["paths"] == []
+    # Both were requested and neither landed: the spec promises the user is told
+    # which ids did not make it, so they can re-select rather than assume.
+    assert result["not_returned"] == ["m1", "m2"]
     folder = tmp_path / meetings.TRANSCRIPT_DIR
     assert list(folder.glob("*.md")) == []
     assert conn.execute("SELECT COUNT(*) FROM meeting_queue").fetchone()[0] == 0
@@ -185,4 +188,25 @@ def test_duplicate_id_in_one_response_is_a_noop_not_a_crash(tmp_path, monkeypatc
     folder = tmp_path / meetings.TRANSCRIPT_DIR
     assert len(list(folder.glob("*.md"))) == 1
     assert conn.execute("SELECT COUNT(*) FROM meeting_queue").fetchone()[0] == 1
+    conn.close()
+
+
+def test_a_partial_response_names_the_ids_that_did_not_arrive(tmp_path, monkeypatch):
+    """Two chosen, one returned. The one that did not come back must be named,
+    not silently dropped from a result that otherwise reads as a success.
+    """
+    conn = _conn(tmp_path, monkeypatch)
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
+
+    result = meetings.sync(conn, ["m1", "m2"])
+
+    assert result["synced"] == ["m1"]
+    assert result["not_returned"] == ["m2"]
+    conn.close()
+
+
+def test_nothing_is_flagged_when_every_chosen_meeting_arrives(tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
+    assert meetings.sync(conn, ["m1"])["not_returned"] == []
     conn.close()

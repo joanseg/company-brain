@@ -17,24 +17,31 @@ brain is usually a git repository.
    gave. If `count` is 0, say so and stop. If `truncated` is true the listing
    stopped at its page bound — tell the user the list may be short and offer to
    narrow it with a search term or a smaller window.
-2. Print a numbered table: number, date, title, duration in minutes, attendees,
-   tags. Number only the meetings still open to sync; list any whose `synced`
-   is true separately, marked as already held, with no number of their own —
-   so every number in the table is one the user can actually pick.
+2. Print a numbered table: number, date, title, duration, attendees, tags.
+   `duration` comes back from Circleback in **seconds** — divide by 60 and show
+   minutes in the table. Number only the meetings still open to sync; list any
+   whose `synced` is true separately, marked as already held, with no number of
+   their own — so every number in the table is one the user can actually pick.
 3. Ask which to sync. Accept `1,3,7-9`, `all`, `none`, or a name or date
    fragment. Use a printed table and a free-text reply rather than
    AskUserQuestion — a 30-day window routinely exceeds its four-option limit.
-4. Resolve the selection to ids and read them back to the user before syncing.
+4. Resolve the selection to ids and read them back to the user before syncing,
+   naming where the transcripts will land: the full verbatim text of each is
+   written as plaintext into `meeting-transcripts/` in this repo, which is
+   usually git-committed. Seeing that before it happens is the point of asking.
    If a fragment or any part of the selection matches more than one row, or
    matches none, list what it matched and ask again rather than guessing —
    never resolve an ambiguous selection on the user's behalf. `none` is a
    valid answer: confirm and stop, leaving no trace.
-5. Call `meetings_sync` with the chosen ids as a JSON string.
+5. Call `meetings_sync` with the chosen ids as a JSON string. If
+   `not_returned` comes back non-empty, Circleback sent no transcript for those
+   ids — name them so the user can re-select them.
 6. Call `reindex` so the transcripts become searchable.
 
 ## Phase 2 — summarise
 
-Repeat until `pending` reaches 0.
+Repeat until a pull comes back empty. `pending` is not the terminator: it is
+counted after leasing, so it excludes the batch you were just handed.
 
 1. Call `meetings_pull` (default limit 5). If `count` is 0, phase 2 is done.
 2. Dispatch one subagent per meeting **in a single message** so they run

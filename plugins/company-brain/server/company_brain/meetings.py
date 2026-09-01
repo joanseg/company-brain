@@ -269,7 +269,7 @@ def _unique_name(root, stem: str, meeting_id: str) -> str:
 
 def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
     """Fetch and store only the meetings the user chose."""
-    result: dict = {"synced": [], "skipped": [], "paths": []}
+    result: dict = {"synced": [], "skipped": [], "paths": [], "not_returned": []}
     already_synced = _held(conn)
     wanted = [mid for mid in meeting_ids if mid not in already_synced]
     result["skipped"] = [mid for mid in meeting_ids if mid in already_synced]
@@ -306,6 +306,11 @@ def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
         already_synced.add(meeting_id)
         result["synced"].append(meeting_id)
         result["paths"].append(rel_path)
+    # Requested but absent from the response — a partial result, a rate limit
+    # mid-batch, an id Circleback no longer knows. Named so the user can
+    # re-select them rather than assuming the whole selection landed.
+    written = set(result["synced"])
+    result["not_returned"] = [mid for mid in wanted if mid not in written]
     return result
 
 

@@ -10,5 +10,7 @@ Use the `brain-meetings` skill. Nothing syncs without the user choosing it.
 Arguments, all optional: a number sets the date window in days (default 30),
 any remaining words are a search term.
 
-If `CIRCLEBACK_API_KEY` is not configured, say so and point at
-https://circleback.ai/settings?tab=api-access — do not attempt the sync.
+`CIRCLEBACK_API_KEY` lives in the MCP server's environment, not this session's,
+so do not try to check it first. If it is unset, `meetings_list` fails with a
+named error pointing at https://circleback.ai/settings?tab=api-access — surface
+that error to the user and stop rather than retrying.

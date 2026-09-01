@@ -164,14 +164,17 @@ note.
   `application/json` and `text/event-stream` responses, because the endpoint may
   return either. Reads `CIRCLEBACK_API_KEY`; raises a message naming
   `https://circleback.ai/settings?tab=api-access` when unset.
-- `list(conn, days=30, query=None) -> list[dict]` — `SearchMeetings` over a date
-  window, returning id, title, date, duration, attendees, tags, and a `synced`
-  flag set from `meeting_queue`. Read-only: writes nothing, so the user can browse
-  freely.
+- `list(conn, days=30, query=None) -> dict` — `SearchMeetings` over a date
+  window, returning `{"meetings": [...], "truncated": bool}`. Each row carries id,
+  title, date, duration (**seconds**, as Circleback sends it), attendees, tags,
+  and a `synced` flag set from `meeting_queue`. Pages are walked until one comes
+  back empty, bounded at 10; `truncated` says the bound was hit. Read-only: writes
+  nothing, so the user can browse freely.
 - `sync(conn, meeting_ids) -> dict` — `GetTranscriptsForMeetings` for the chosen
-  ids only. Writes each transcript to the transcripts source and inserts a
-  `meeting_queue` row. Ids already present are skipped, so re-selecting a synced
-  meeting is a no-op rather than a duplicate.
+  ids only. Writes each transcript to the transcripts source and upserts a
+  `meeting_queue` row. Ids already held are skipped, so re-selecting a synced
+  meeting is a no-op rather than a duplicate; a `'missing'` row is not held and is
+  re-fetched. Returns `not_returned`: chosen ids the response never carried.
 - `pull(conn, limit) -> list[dict]` — leases pending meetings inside a
   `BEGIN IMMEDIATE` with a 30-minute expiry, mirroring `enrich.pull` exactly.
 - `push(conn, results) -> dict` — calls `capture.add(kind="meeting", ...)` for each
@@ -180,7 +183,15 @@ note.
 ### `db.py` changes
 
 `load_sources()` carries an `enrich` key (default `True`), `save_sources()`
-persists it, and `_migrate()` adds the `sources.enrich` column.
+persists it, and `_migrate()` adds the `sources.enrich` column. `save_sources()`
+stores a root inside `project_dir()` relative to it, so the round trip
+`ensure_sources()` performs cannot bake an absolute anchor root that would point
+at the old location after the repo moves.
+
+A source with `enrich = 0` is excluded from the "documents with no entities"
+health metric in `views.overview()` and from `dream.report()`'s orphan list: its
+documents are never eligible for extraction, so their having no mentions is the
+design, not a defect.
 
 ```sql
 CREATE TABLE IF NOT EXISTS meeting_queue (
@@ -257,7 +268,9 @@ Selecting nothing is a supported outcome and leaves no trace.
 
 ### SessionStart hook
 
-`hooks/staleness.sh` gains a count of transcripts fetched but not yet summarised,
+`hooks/staleness.sh` gains a count of transcripts fetched but not yet summarised
+(`status IN ('pending','leased')` — at session start no lease is legitimately in
+flight, so a meeting whose summary failed is still awaiting one),
 guarded so a database predating this feature reports nothing. Report, never act —
 matching the existing behaviour of that script. It does **not** mention unsynced
 Circleback meetings: that would require a network call in a session hook.
@@ -269,10 +282,13 @@ Circleback meetings: that would require a network call in a session hook.
 | `CIRCLEBACK_API_KEY` unset | Named error pointing at the settings URL. `list` and `sync` both refuse; nothing partial. |
 | 401 / 403 | Surface Circleback's message unchanged. |
 | 429 or network failure during `list` | Report and stop. Nothing was written, so there is nothing to unwind. |
-| 429 or network failure during `sync` | Meetings already written keep their queue rows and stay valid; report which ids did not make it so the user can re-select them. |
+| 429 or network failure during `sync` | Meetings already written keep their queue rows and stay valid; `sync()` returns `not_returned` — the chosen ids absent from the response — and the skill names them so the user can re-select. |
 | Meeting id already in `meeting_queue` | Skipped silently; re-selecting is a no-op, never a duplicate file. |
 | Subagent returns unusable JSON | That meeting's lease expires and returns to `pending`; others in the batch still commit. |
 | Transcript write fails | No queue row is inserted, so the meeting simply reappears in the next listing as unsynced. |
+| Transcript file deleted after syncing | `pull()` marks the row `'missing'`, which is not a held status: the meeting lists as unsynced again and `sync()` re-fetches it. |
+| A summary a subagent returns is unusable | Named in `push()`'s `skipped` with the reason, and reported by the skill. The row stays `'leased'` until the lease expires; the session hook counts it. |
+| `SearchMeetings` has more pages than the walk covers | The listing stops at 10 pages and returns `truncated: true`; the skill says the list may be short. |
 
 ## Testing
 
@@ -280,7 +296,11 @@ Circleback meetings: that would require a network call in a session hook.
 
 - `_call` parses both JSON and SSE response bodies, against captured fixtures.
 - `list` marks meetings already in `meeting_queue` as synced.
-- Selection parsing: `1,3,7-9`, `all`, `none`, out-of-range and malformed input.
+- Selection parsing is **not** unit-tested, and no code implements it. Under D6
+  the selection contract lives in `skills/brain-meetings/SKILL.md` as prose the
+  agent follows — `1,3,7-9`, `all`, `none`, a name or date fragment, and the rule
+  that an ambiguous or unmatched selection is asked again rather than guessed.
+  It is verified by reading that skill, not by a test.
 - `sync` of an id already queued writes no second file and no second row.
 - Transcript file shape: path, frontmatter, `reference::`.
 - Queue transitions: `pending → leased → done`; expired leases return to `pending`.
