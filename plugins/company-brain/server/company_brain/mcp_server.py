@@ -221,6 +221,8 @@ def meetings_sync(meeting_ids: str) -> dict:
     payload = _parse(meeting_ids, "meeting_ids")
     if isinstance(payload, dict):
         payload = payload.get("meeting_ids", [])
+    if not isinstance(payload, list):
+        raise ValueError("meeting_ids must be a JSON array of meeting ids")
     with _conn() as conn:
         result = meetings.sync(conn, [str(i) for i in payload])
         result["next"] = "Run reindex, then summarise with the brain-meetings skill."
