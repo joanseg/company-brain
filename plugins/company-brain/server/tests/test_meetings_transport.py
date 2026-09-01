@@ -81,8 +81,33 @@ def test_call_parses_a_server_sent_events_response(monkeypatch):
 
 def test_call_parses_a_multi_line_sse_frame(monkeypatch):
     monkeypatch.setenv("CIRCLEBACK_API_KEY", "cb_test")
-    payload = _rpc({"structuredContent": {"meetings": []}})
-    body = "event: message\n" + "\n".join("data: %s" % line for line in payload.splitlines()) + "\n\n"
+    payload = _rpc({"structuredContent": {"meetings": [{"id": "m3"}]}})
+    # Split inside the ", " between two top-level members: not inside a quoted
+    # string (a raw newline there would make the JSON itself invalid), but a
+    # genuine mid-document cut -- neither half is complete JSON on its own,
+    # so this only passes if `_body` actually joins the two data: lines.
+    split_at = payload.index(', "result"') + 1
+    first_half, second_half = payload[:split_at], payload[split_at:]
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(first_half)
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(second_half)
+
+    body = "event: message\ndata: %s\ndata: %s\n\n" % (first_half, second_half)
+    result = meetings._call(
+        "SearchMeetings", {},
+        opener=lambda r, timeout=None: FakeResponse(body, "text/event-stream"))
+    assert result == {"meetings": [{"id": "m3"}]}
+
+
+def test_call_stops_the_sse_frame_at_the_first_blank_line(monkeypatch):
+    monkeypatch.setenv("CIRCLEBACK_API_KEY", "cb_test")
+    first_event = _rpc({"structuredContent": {"meetings": []}})
+    second_event = _rpc({"structuredContent": {"meetings": [{"id": "should-not-appear"}]}})
+    body = (
+        "event: message\ndata: %s\n\n"
+        "event: message\ndata: %s\n\n" % (first_event, second_event)
+    )
     result = meetings._call(
         "SearchMeetings", {},
         opener=lambda r, timeout=None: FakeResponse(body, "text/event-stream"))
