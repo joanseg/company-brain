@@ -23,6 +23,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from . import db
+from .ingest import slug
 
 API_URL = "https://circleback.ai/api/mcp"
 SETTINGS_URL = "https://circleback.ai/settings?tab=api-access"
@@ -186,3 +187,73 @@ def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = 
             "synced": meeting.get("id", "") in held,
         })
     return rows
+
+
+def _transcript_markdown(meeting: dict) -> str:
+    """Frontmatter carries `date:` so freshness reflects when the meeting happened,
+    not when it was fetched. One `## Transcript` heading is enough — `heading_chunks`
+    packs long sections to CHUNK_WORDS on its own.
+    """
+    title = (meeting.get("name") or "").strip() or "Untitled meeting"
+    held = (meeting.get("createdAt") or "")[:10]
+    attendees = [a.get("name") or a.get("email") or "" for a in meeting.get("attendees") or []]
+    lines = [
+        "---",
+        "name: %s" % slug(title),
+        "type: transcript",
+        "date: %s" % held,
+        "attendees: [%s]" % ", ".join(a for a in attendees if a),
+        "tags: [meeting-transcript]",
+        "---",
+        "",
+        "# %s" % title,
+        "",
+        "## Transcript",
+        "",
+    ]
+    for turn in meeting.get("transcript") or []:
+        speaker = (turn.get("speaker") or "Unknown").strip()
+        text = (turn.get("text") or "").strip()
+        if text:
+            lines.append("%s: %s" % (speaker, text))
+    lines += ["", "## Provenance", "- source:: circleback"]
+    if meeting.get("url"):
+        lines.append("- reference:: %s" % meeting["url"])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
+    """Fetch and store only the meetings the user chose."""
+    result: dict = {"synced": [], "skipped": [], "paths": []}
+    held = {r["meeting_id"] for r in conn.execute("SELECT meeting_id FROM meeting_queue")}
+    wanted = [mid for mid in meeting_ids if mid not in held]
+    result["skipped"] = [mid for mid in meeting_ids if mid in held]
+    if not wanted:
+        return result
+
+    ensure_sources()
+    root = db.project_dir() / TRANSCRIPT_DIR
+    root.mkdir(parents=True, exist_ok=True)
+    payload = _call("GetTranscriptsForMeetings", {"meetingIds": wanted}, opener=opener)
+
+    for meeting in payload.get("meetings") or []:
+        meeting_id = meeting.get("id", "")
+        if not meeting_id or meeting_id in held:
+            continue
+        title = (meeting.get("name") or "").strip() or "Untitled meeting"
+        held_at = (meeting.get("createdAt") or "")[:10]
+        name = "%s-%s.md" % (held_at or "undated", slug(title)[:70] or "meeting")
+        if (root / name).exists():
+            # Two meetings the same day with the same name are rare but real;
+            # never let the second overwrite the first.
+            name = name[:-3] + "-" + slug(meeting_id)[:8] + ".md"
+        (root / name).write_text(_transcript_markdown(meeting), encoding="utf-8")
+        rel_path = "%s/%s" % (TRANSCRIPT_DIR, name)
+        conn.execute(
+            "INSERT INTO meeting_queue(meeting_id, title, held_at, rel_path, status, updated_at) "
+            "VALUES(?,?,?,?,'pending',?)",
+            (meeting_id, title, held_at, rel_path, _now()))
+        result["synced"].append(meeting_id)
+        result["paths"].append(rel_path)
+    conn.commit()
+    return result
