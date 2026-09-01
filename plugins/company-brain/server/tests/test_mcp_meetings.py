@@ -141,10 +141,20 @@ def test_meetings_push_rejects_null():
         mcp_server.meetings_push("null")
 
 
-def test_meetings_push_still_accepts_a_bare_string_pinning_safe_behaviour():
-    # A bare JSON string iterates as characters; meetings.push()'s per-item
-    # except routes each to "skipped" rather than raising. Pinned so a future
-    # guard on this tool does not over-reject a shape that currently works.
-    result = mcp_server.meetings_push('"m1"')
-    assert result["captured"] == 0
-    assert result["skipped"] == ["<unresolved result>", "<unresolved result>"]
+def test_meetings_push_rejects_a_bare_json_string():
+    # A bare string only "worked" before because iterating it yields
+    # characters and push()'s per-item except swallows the AttributeError on
+    # each one, silently returning nothing captured. Not a shape worth
+    # tolerating — reject it like meetings_sync does.
+    with pytest.raises(ValueError):
+        mcp_server.meetings_push('"m1"')
+
+
+def test_meetings_push_rejects_a_bare_number():
+    with pytest.raises(ValueError):
+        mcp_server.meetings_push("5")
+
+
+def test_meetings_sync_rejects_a_bare_number():
+    with pytest.raises(ValueError):
+        mcp_server.meetings_sync("5")
