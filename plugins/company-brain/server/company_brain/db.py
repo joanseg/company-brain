@@ -259,11 +259,26 @@ def anchor_source() -> dict:
     return sources[0]
 
 
+def _stored_root(root) -> str:
+    """A root inside the project is stored relative to it, so `sources.json`
+    survives the repo being moved or re-cloned. `load_sources()` re-resolves it.
+    An absolute root written here would keep pointing at the old location, and
+    `capture.add()` would recreate that directory and write notes into it.
+    """
+    path = Path(root).expanduser()
+    if not path.is_absolute():
+        return str(root)
+    try:
+        return str(path.relative_to(project_dir()))
+    except ValueError:
+        return str(path)
+
+
 def save_sources(sources: list[dict]) -> None:
     payload = {"sources": [
         {
             "name": s["name"],
-            "root": str(s["root"]),
+            "root": _stored_root(s["root"]),
             "weight": s["weight"],
             "enrich": bool(s.get("enrich", True)),
             "exclude": [e for e in s.get("exclude", []) if e not in DEFAULT_EXCLUDES],
