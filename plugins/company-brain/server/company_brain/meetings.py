@@ -170,22 +170,41 @@ def ensure_sources() -> dict:
     return {"registered": registered, "excluded": excluded}
 
 
+MAX_PAGES = 10
+
+
 def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = None,
-                  opener=None) -> list[dict]:
+                  opener=None) -> dict:
     """What Circleback has in the window, with what the brain already holds marked.
 
     Read-only on purpose: browsing must never write, so the user can look before
     choosing anything.
+
+    Pages are walked until one comes back empty, because selection is this
+    feature's whole control surface — a user cannot pick a meeting the listing
+    never showed. Only the `meetings` list is read: the live envelope's total and
+    paging field names are unverified, so none is assumed. `truncated` says the
+    walk stopped at MAX_PAGES and the list may be short.
     """
-    args: dict = {"pageIndex": 0,
-                  "startDate": (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()}
+    args: dict = {"startDate":
+                  (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()}
     if query:
         args["searchTerm"] = query
-    payload = _call("SearchMeetings", args, opener=opener)
+
+    found: list[dict] = []
+    truncated = True
+    for page in range(MAX_PAGES):
+        args["pageIndex"] = page
+        payload = _call("SearchMeetings", args, opener=opener)
+        page_meetings = payload.get("meetings") or []
+        if not page_meetings:
+            truncated = False
+            break
+        found.extend(page_meetings)
 
     held = _held(conn)
     rows = []
-    for meeting in payload.get("meetings") or []:
+    for meeting in found:
         rows.append({
             "id": meeting.get("id", ""),
             "title": (meeting.get("name") or "").strip() or "Untitled meeting",
@@ -196,7 +215,7 @@ def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = 
             "tags": list(meeting.get("tags") or []),
             "synced": meeting.get("id", "") in held,
         })
-    return rows
+    return {"meetings": rows, "truncated": truncated}
 
 
 def _transcript_markdown(meeting: dict) -> str:

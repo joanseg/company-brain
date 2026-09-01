@@ -209,9 +209,11 @@ def enrich_push(results: str) -> dict:
                          "let them choose before calling meetings_sync.")
 def meetings_list(days: int = 30, query: str | None = None) -> dict:
     with _conn() as conn:
-        rows = meetings.list_meetings(conn, max(1, min(days, 365)), query)
+        listing = meetings.list_meetings(conn, max(1, min(days, 365)), query)
+        rows = listing["meetings"]
         return {"meetings": rows, "count": len(rows),
-                "unsynced": sum(1 for r in rows if not r["synced"])}
+                "unsynced": sum(1 for r in rows if not r["synced"]),
+                "truncated": listing["truncated"]}
 
 
 @server.tool(description="Fetch transcripts for the meeting ids the user chose and queue them for "

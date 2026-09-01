@@ -14,7 +14,9 @@ brain is usually a git repository.
 ## Phase 1 — choose
 
 1. Call `meetings_list` with `days` (default 30) and any search term the user
-   gave. If `count` is 0, say so and stop.
+   gave. If `count` is 0, say so and stop. If `truncated` is true the listing
+   stopped at its page bound — tell the user the list may be short and offer to
+   narrow it with a search term or a smaller window.
 2. Print a numbered table: number, date, title, duration in minutes, attendees,
    tags. Number only the meetings still open to sync; list any whose `synced`
    is true separately, marked as already held, with no number of their own —

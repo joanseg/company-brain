@@ -20,13 +20,15 @@ def test_meetings_list_counts_unsynced_from_the_synced_flag(monkeypatch):
         {"id": "m2", "synced": False},
         {"id": "m3", "synced": False},
     ]
-    monkeypatch.setattr(meetings, "list_meetings", lambda conn, days, query: rows)
+    monkeypatch.setattr(meetings, "list_meetings",
+                        lambda conn, days, query: {"meetings": rows, "truncated": True})
 
     result = mcp_server.meetings_list()
 
     assert result["meetings"] == rows
     assert result["count"] == 3
     assert result["unsynced"] == 2
+    assert result["truncated"] is True
 
 
 @pytest.mark.parametrize("days, expected", [(0, 1), (400, 365)])
@@ -35,7 +37,7 @@ def test_meetings_list_clamps_days(monkeypatch, days, expected):
 
     def fake(conn, days, query):
         seen["days"] = days
-        return []
+        return {"meetings": [], "truncated": False}
 
     monkeypatch.setattr(meetings, "list_meetings", fake)
     mcp_server.meetings_list(days=days)

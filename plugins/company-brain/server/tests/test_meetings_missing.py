@@ -15,9 +15,15 @@ TRANSCRIPTS = {"meetings": [{
 }]}
 
 
+def _fake_call(tool, args, opener=None):
+    if tool == "SearchMeetings" and args["pageIndex"] > 0:
+        return {"meetings": []}
+    return TRANSCRIPTS
+
+
 def _conn(tmp_path, monkeypatch):
     monkeypatch.setenv("COMPANY_BRAIN_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
+    monkeypatch.setattr(meetings, "_call", _fake_call)
     return db.connect()
 
 
@@ -33,7 +39,7 @@ def test_a_missing_meeting_lists_as_unsynced(tmp_path, monkeypatch):
     meetings.sync(conn, ["m1"])
     _mark_missing(conn, tmp_path)
 
-    assert meetings.list_meetings(conn)[0]["synced"] is False
+    assert meetings.list_meetings(conn)["meetings"][0]["synced"] is False
     conn.close()
 
 
