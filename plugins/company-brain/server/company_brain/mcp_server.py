@@ -216,21 +216,23 @@ def meetings_list(days: int = 30, query: str | None = None) -> dict:
                 "truncated": listing["truncated"]}
 
 
-@server.tool(description="Fetch transcripts for the meeting ids the user chose and queue them for "
-                         "summarising. `meeting_ids` is a JSON array of ids from meetings_list. "
+@server.tool(description="Fetch transcripts for the meetings the user chose and queue them for "
+                         "summarising. `meetings` is a JSON array of the ROWS from meetings_list "
+                         "(each with id, title, date, attendees) — not bare ids, because a "
+                         "transcript response carries no date or attendees of its own. "
                          "Never call this without an explicit choice from the user.")
-def meetings_sync(meeting_ids: str) -> dict:
-    payload = _parse(meeting_ids, "meeting_ids")
+def meetings_sync(meetings_chosen: str) -> dict:
+    payload = _parse(meetings_chosen, "meetings_chosen")
     if isinstance(payload, dict):
         # An object without the wrapper key used to fall through as an empty
         # selection and report success having synced nothing.
-        if "meeting_ids" not in payload:
-            raise ValueError('an object must wrap the ids under "meeting_ids"')
-        payload = payload["meeting_ids"]
+        if "meetings" not in payload:
+            raise ValueError('an object must wrap the rows under "meetings"')
+        payload = payload["meetings"]
     if not isinstance(payload, list):
-        raise ValueError("meeting_ids must be a JSON array of meeting ids")
+        raise ValueError("meetings_chosen must be a JSON array of rows from meetings_list")
     with _conn() as conn:
-        result = meetings.sync(conn, [str(i) for i in payload])
+        result = meetings.sync(conn, payload)
         result["next"] = "Run reindex, then summarise with the brain-meetings skill."
         return result
 
