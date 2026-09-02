@@ -8,7 +8,7 @@
       "name": "company-brain",
       "description": "Ask questions of your markdown and get answers with file-and-line citations. Hybrid lexical + semantic + graph retrieval, entirely local.",
       "category": "knowledge",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "source": "./plugins/company-brain"
     }
   ]

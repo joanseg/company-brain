@@ -1,4 +1,16 @@
 # Changelog
+## 0.4.1
+
+- Fix `/brain-meetings` against the live Circleback API. `0.4.0` could not talk
+  to it at all: requests lacked the `x-circleback-cli-version` header and were
+  rejected with HTTP 426, and both endpoints return a bare JSON list rather than
+  a wrapped object.
+- `meetings_sync` now takes the chosen rows from `meetings_list` rather than bare
+  ids. Transcript responses carry no date or attendees, so without the row every
+  transcript was filed undated and unattributed.
+- `duration` and `tags` are treated as optional — Circleback does not return them
+  for every meeting.
+
 
 ## 0.4.0
 
