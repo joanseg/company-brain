@@ -3,17 +3,14 @@ import json
 
 from company_brain import db, meetings
 
-TRANSCRIPTS = {"meetings": [{
+TRANSCRIPTS = [{
     "id": "m1",
-    "name": "Pricing review",
-    "createdAt": "2026-08-20T10:00:00Z",
-    "url": "https://circleback.ai/meetings/m1",
-    "attendees": [{"name": "Joan"}, {"name": "David"}],
+    "meetingName": "Pricing review",
     "transcript": [
         {"speaker": "Joan", "text": "We should raise the floor price.", "timestamp": 12},
         {"speaker": "David", "text": "Agreed, from March.", "timestamp": 20},
     ],
-}]}
+}]
 
 
 def _conn(tmp_path, monkeypatch):
@@ -25,7 +22,7 @@ def test_sync_writes_a_transcript_and_queues_it(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
 
-    result = meetings.sync(conn, ["m1"])
+    result = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
 
     assert result["synced"] == ["m1"]
     assert result["skipped"] == []
@@ -47,7 +44,7 @@ def test_sync_writes_a_transcript_and_queues_it(tmp_path, monkeypatch):
 def test_sync_names_the_file_by_date_and_title(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
-    result = meetings.sync(conn, ["m1"])
+    result = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
     assert result["paths"][0] == "meeting-transcripts/2026-08-20-pricing-review.md"
     conn.close()
 
@@ -55,9 +52,9 @@ def test_sync_names_the_file_by_date_and_title(tmp_path, monkeypatch):
 def test_resyncing_a_held_meeting_is_a_no_op(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
-    meetings.sync(conn, ["m1"])
+    meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
 
-    second = meetings.sync(conn, ["m1"])
+    second = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
     assert second["synced"] == []
     assert second["skipped"] == ["m1"]
 
@@ -77,7 +74,7 @@ def test_sync_requests_only_the_chosen_ids(tmp_path, monkeypatch):
         return TRANSCRIPTS
 
     monkeypatch.setattr(meetings, "_call", fake_call)
-    meetings.sync(conn, ["m1"])
+    meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
 
     assert seen["tool"] == "GetTranscriptsForMeetings"
     assert seen["ids"] == ["m1"]
@@ -103,7 +100,7 @@ def test_sync_registers_the_transcripts_source(tmp_path, monkeypatch):
     """
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
-    meetings.sync(conn, ["m1"])
+    meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
 
     config = json.loads(db.sources_path().read_text())["sources"]
     names = [s["name"] for s in config]
@@ -113,14 +110,14 @@ def test_sync_registers_the_transcripts_source(tmp_path, monkeypatch):
 
 
 def test_three_meetings_same_date_and_title_get_distinct_files(tmp_path, monkeypatch):
-    triple = {"meetings": [
-        {**TRANSCRIPTS["meetings"][0], "id": "m1"},
-        {**TRANSCRIPTS["meetings"][0], "id": "m2"},
-        {**TRANSCRIPTS["meetings"][0], "id": "m3"},
-    ]}
+    triple = [
+        {**TRANSCRIPTS[0], "id": "m1"},
+        {**TRANSCRIPTS[0], "id": "m2"},
+        {**TRANSCRIPTS[0], "id": "m3"},
+    ]
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: triple)
-    result = meetings.sync(conn, ["m1", "m2", "m3"])
+    result = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}, {"id": "m2", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m2"}, {"id": "m3", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m3"}])
 
     assert len(result["paths"]) == 3
     assert len(set(result["paths"])) == 3
@@ -132,17 +129,17 @@ def test_three_meetings_same_date_and_title_get_distinct_files(tmp_path, monkeyp
 def test_mixed_batch_of_held_and_new(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
-    meetings.sync(conn, ["m1"])
+    meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
 
-    second_meeting = {**TRANSCRIPTS["meetings"][0], "id": "m2", "name": "Roadmap sync"}
+    second_meeting = {**TRANSCRIPTS[0], "id": "m2", "meetingName": "Roadmap sync"}
     seen = {}
 
     def fake_call(tool, args, opener=None):
         seen["ids"] = args["meetingIds"]
-        return {"meetings": [second_meeting]}
+        return [second_meeting]
 
     monkeypatch.setattr(meetings, "_call", fake_call)
-    result = meetings.sync(conn, ["m1", "m2"])
+    result = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}, {"id": "m2", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m2"}])
 
     assert result["synced"] == ["m2"]
     assert result["skipped"] == ["m1"]
@@ -155,11 +152,11 @@ def test_partial_response_ignores_missing_and_idless_meetings(tmp_path, monkeypa
     """"m2" is requested but never comes back; the one meeting that does come
     back has no id. Neither may leave a file, a row, or a `synced` entry.
     """
-    idless = {**TRANSCRIPTS["meetings"][0], "id": ""}
+    idless = {**TRANSCRIPTS[0], "id": ""}
     conn = _conn(tmp_path, monkeypatch)
-    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: {"meetings": [idless]})
+    monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: [idless])
 
-    result = meetings.sync(conn, ["m1", "m2"])
+    result = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}, {"id": "m2", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m2"}])
 
     assert result["synced"] == []
     assert result["skipped"] == []
@@ -177,11 +174,11 @@ def test_duplicate_id_in_one_response_is_a_noop_not_a_crash(tmp_path, monkeypatc
     """Regression for the reviewer's finding: a response repeating the same id
     used to write two files and then crash on the second INSERT.
     """
-    duplicated = {"meetings": [TRANSCRIPTS["meetings"][0], TRANSCRIPTS["meetings"][0]]}
+    duplicated = [TRANSCRIPTS[0], TRANSCRIPTS[0]]
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: duplicated)
 
-    result = meetings.sync(conn, ["m1"])
+    result = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
 
     assert result["synced"] == ["m1"]
     assert len(result["paths"]) == 1
@@ -198,7 +195,7 @@ def test_a_partial_response_names_the_ids_that_did_not_arrive(tmp_path, monkeypa
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
 
-    result = meetings.sync(conn, ["m1", "m2"])
+    result = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}, {"id": "m2", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m2"}])
 
     assert result["synced"] == ["m1"]
     assert result["not_returned"] == ["m2"]
@@ -208,5 +205,5 @@ def test_a_partial_response_names_the_ids_that_did_not_arrive(tmp_path, monkeypa
 def test_nothing_is_flagged_when_every_chosen_meeting_arrives(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
     monkeypatch.setattr(meetings, "_call", lambda tool, args, opener=None: TRANSCRIPTS)
-    assert meetings.sync(conn, ["m1"])["not_returned"] == []
+    assert meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])["not_returned"] == []
     conn.close()

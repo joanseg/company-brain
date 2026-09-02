@@ -59,17 +59,19 @@ def test_meetings_sync_accepts_a_bare_array(monkeypatch):
     assert result["next"]
 
 
-def test_meetings_sync_accepts_an_object_wrapping_the_ids(monkeypatch):
+def test_meetings_sync_accepts_an_object_wrapping_the_rows(monkeypatch):
     seen = {}
 
-    def fake_sync(conn, ids, opener=None):
-        seen["ids"] = ids
-        return {"synced": ids, "skipped": [], "paths": []}
+    def fake_sync(conn, chosen, opener=None):
+        seen["chosen"] = chosen
+        return {"synced": [r["id"] for r in chosen], "skipped": [], "paths": []}
 
     monkeypatch.setattr(meetings, "sync", fake_sync)
-    mcp_server.meetings_sync('{"meeting_ids": ["m3"]}')
+    mcp_server.meetings_sync('{"meetings": [{"id": "m3", "title": "T", "date": "2026-08-20"}]}')
 
-    assert seen["ids"] == ["m3"]
+    # Rows pass through whole — the date and title are the metadata a transcript
+    # response does not carry.
+    assert seen["chosen"] == [{"id": "m3", "title": "T", "date": "2026-08-20"}]
 
 
 def test_meetings_sync_rejects_a_bare_json_string():

@@ -6,18 +6,18 @@ unrecoverable short of hand-editing SQLite.
 """
 from company_brain import db, meetings
 
-TRANSCRIPTS = {"meetings": [{
+TRANSCRIPTS = [{
     "id": "m1",
     "name": "Pricing review",
     "createdAt": "2026-08-20T10:00:00Z",
     "attendees": [{"name": "Joan"}],
     "transcript": [{"speaker": "Joan", "text": "We should raise the floor price."}],
-}]}
+}]
 
 
 def _fake_call(tool, args, opener=None):
     if tool == "SearchMeetings" and args["pageIndex"] > 0:
-        return {"meetings": []}
+        return []
     return TRANSCRIPTS
 
 
@@ -36,7 +36,7 @@ def _mark_missing(conn, tmp_path):
 
 def test_a_missing_meeting_lists_as_unsynced(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
-    meetings.sync(conn, ["m1"])
+    meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
     _mark_missing(conn, tmp_path)
 
     assert meetings.list_meetings(conn)["meetings"][0]["synced"] is False
@@ -45,10 +45,10 @@ def test_a_missing_meeting_lists_as_unsynced(tmp_path, monkeypatch):
 
 def test_sync_refetches_a_missing_meeting(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
-    meetings.sync(conn, ["m1"])
+    meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
     _mark_missing(conn, tmp_path)
 
-    result = meetings.sync(conn, ["m1"])
+    result = meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
 
     assert result["synced"] == ["m1"]
     assert result["skipped"] == []
@@ -61,9 +61,9 @@ def test_sync_refetches_a_missing_meeting(tmp_path, monkeypatch):
 
 def test_the_whole_delete_and_recover_cycle_ends_summarisable(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
-    meetings.sync(conn, ["m1"])
+    meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
     _mark_missing(conn, tmp_path)
-    meetings.sync(conn, ["m1"])
+    meetings.sync(conn, [{"id": "m1", "title": "Pricing review", "date": "2026-08-20", "attendees": ["Joan", "David"], "url": "https://circleback.ai/meetings/m1"}])
 
     batch = meetings.pull(conn)
 

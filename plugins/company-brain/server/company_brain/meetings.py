@@ -27,6 +27,10 @@ from .ingest import slug
 
 API_URL = "https://circleback.ai/api/mcp"
 SETTINGS_URL = "https://circleback.ai/settings?tab=api-access"
+# Circleback answers HTTP 426 to any client that does not identify its version.
+# The value tracks @circleback/cli, whose minimum accepted version is 0.3.0.
+CLIENT_VERSION_HEADER = "x-circleback-cli-version"
+CLIENT_VERSION = "0.3.1"
 TIMEOUT_SECONDS = 60
 
 TRANSCRIPT_DIR = "meeting-transcripts"
@@ -64,6 +68,21 @@ def _unwrap(result: dict) -> dict:
             except (json.JSONDecodeError, KeyError):
                 return {"text": item.get("text", "")}
     return result
+
+
+def _items(payload) -> list[dict]:
+    """Both tools return a bare JSON list; tolerate a wrapped object too.
+
+    `content[0].text` parses straight to a list — there is no `structuredContent`
+    and no `{"meetings": [...]}` envelope, so callers cannot assume a mapping.
+    """
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ("meetings", "transcripts", "results"):
+            if isinstance(payload.get(key), list):
+                return [item for item in payload[key] if isinstance(item, dict)]
+    return []
 
 
 def _body(payload: bytes, content_type: str) -> dict:
@@ -123,6 +142,7 @@ def _call(tool: str, args: dict, opener=None) -> dict:
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
             "Authorization": "Bearer %s" % _api_key(),
+            CLIENT_VERSION_HEADER: CLIENT_VERSION,
         },
     )
     try:
@@ -195,8 +215,7 @@ def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = 
     truncated = True
     for page in range(MAX_PAGES):
         args["pageIndex"] = page
-        payload = _call("SearchMeetings", args, opener=opener)
-        page_meetings = payload.get("meetings") or []
+        page_meetings = _items(_call("SearchMeetings", args, opener=opener))
         if not page_meetings:
             truncated = False
             break
@@ -218,14 +237,17 @@ def list_meetings(conn: sqlite3.Connection, days: int = 30, query: str | None = 
     return {"meetings": rows, "truncated": truncated}
 
 
-def _transcript_markdown(meeting: dict) -> str:
+def _transcript_markdown(meta: dict, item: dict) -> str:
     """Frontmatter carries `date:` so freshness reflects when the meeting happened,
     not when it was fetched. One `## Transcript` heading is enough — `heading_chunks`
     packs long sections to CHUNK_WORDS on its own.
+
+    `meta` is the listing row the user picked. It has to be, because a transcript
+    response carries only `id`, `meetingName` and the turns — no date, no attendees.
     """
-    title = (meeting.get("name") or "").strip() or "Untitled meeting"
-    held = (meeting.get("createdAt") or "")[:10]
-    attendees = [a.get("name") or a.get("email") or "" for a in meeting.get("attendees") or []]
+    title = (meta.get("title") or item.get("meetingName") or "").strip() or "Untitled meeting"
+    held = (meta.get("date") or "")[:10]
+    attendees = [a for a in (meta.get("attendees") or []) if a]
     lines = [
         "---",
         "name: %s" % slug(title),
@@ -240,14 +262,14 @@ def _transcript_markdown(meeting: dict) -> str:
         "## Transcript",
         "",
     ]
-    for turn in meeting.get("transcript") or []:
+    for turn in item.get("transcript") or []:
         speaker = (turn.get("speaker") or "Unknown").strip()
         text = (turn.get("text") or "").strip()
         if text:
             lines.append("%s: %s" % (speaker, text))
     lines += ["", "## Provenance", "- source:: circleback"]
-    if meeting.get("url"):
-        lines.append("- reference:: %s" % meeting["url"])
+    if meta.get("url"):
+        lines.append("- reference:: %s" % meta["url"])
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -267,29 +289,39 @@ def _unique_name(root, stem: str, meeting_id: str) -> str:
     return name
 
 
-def sync(conn: sqlite3.Connection, meeting_ids: list[str], opener=None) -> dict:
-    """Fetch and store only the meetings the user chose."""
+def sync(conn: sqlite3.Connection, chosen: list[dict], opener=None) -> dict:
+    """Fetch and store only the meetings the user chose.
+
+    `chosen` is the listing rows themselves, not bare ids: a transcript response
+    carries no date and no attendees, so the row the user picked is the only
+    source of that metadata.
+    """
+    if any(not isinstance(row, dict) for row in chosen):
+        raise ValueError("chosen must be the meeting rows from meetings_list, not bare ids")
     result: dict = {"synced": [], "skipped": [], "paths": [], "not_returned": []}
     already_synced = _held(conn)
-    wanted = [mid for mid in meeting_ids if mid not in already_synced]
-    result["skipped"] = [mid for mid in meeting_ids if mid in already_synced]
+    by_id = {row.get("id", ""): row for row in chosen if row.get("id")}
+    wanted = [mid for mid in by_id if mid not in already_synced]
+    result["skipped"] = [mid for mid in by_id if mid in already_synced]
     if not wanted:
         return result
 
     ensure_sources()
     root = db.project_dir() / TRANSCRIPT_DIR
     root.mkdir(parents=True, exist_ok=True)
-    payload = _call("GetTranscriptsForMeetings", {"meetingIds": wanted}, opener=opener)
+    items = _items(_call("GetTranscriptsForMeetings", {"meetingIds": wanted}, opener=opener))
 
-    for meeting in payload.get("meetings") or []:
-        meeting_id = meeting.get("id", "")
-        if not meeting_id or meeting_id in already_synced:
+    for item in items:
+        meeting_id = item.get("id", "")
+        # Only what the user actually picked: a response may carry more.
+        if not meeting_id or meeting_id not in by_id or meeting_id in already_synced:
             continue
-        title = (meeting.get("name") or "").strip() or "Untitled meeting"
-        held_at = (meeting.get("createdAt") or "")[:10]
+        meta = by_id[meeting_id]
+        title = (meta.get("title") or item.get("meetingName") or "").strip() or "Untitled meeting"
+        held_at = (meta.get("date") or "")[:10]
         stem = "%s-%s" % (held_at or "undated", slug(title)[:70] or "meeting")
         name = _unique_name(root, stem, meeting_id)
-        (root / name).write_text(_transcript_markdown(meeting), encoding="utf-8")
+        (root / name).write_text(_transcript_markdown(meta, item), encoding="utf-8")
         rel_path = "%s/%s" % (TRANSCRIPT_DIR, name)
         # Upsert, not insert: a meeting whose transcript was deleted is marked
         # 'missing' and is re-fetched here, so its row must be replaced.
