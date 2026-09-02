@@ -69,11 +69,13 @@ def report(conn: sqlite3.Connection) -> dict:
         "FROM entities e JOIN mentions m ON m.entity_id = e.id "
         "GROUP BY e.id ORDER BY mentions DESC LIMIT 12")]
 
+    # enrich = 0 sources are never extracted from, so their documents are not
+    # orphans; without the filter they would crowd the capped list out.
     orphans = [dict(r) for r in conn.execute(
         "SELECT s.name AS source, d.rel_path, d.title FROM documents d "
         "JOIN sources s ON s.id = d.source_id "
-        "WHERE NOT EXISTS (SELECT 1 FROM chunks c JOIN mentions m ON m.chunk_id = c.id "
-        "                  WHERE c.doc_id = d.id) "
+        "WHERE s.enrich = 1 AND NOT EXISTS ("
+        "  SELECT 1 FROM chunks c JOIN mentions m ON m.chunk_id = c.id WHERE c.doc_id = d.id) "
         "ORDER BY s.name, d.rel_path LIMIT 40")]
 
     superseded = [dict(r) for r in conn.execute(

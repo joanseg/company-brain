@@ -13,7 +13,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
-from . import capture, community, db, dense, dream, enrich, graph, indexer, search, webui
+from . import capture, community, db, dense, dream, enrich, graph, indexer, meetings, search, webui
 
 server = MCPServer(
     name="brain",
@@ -198,6 +198,66 @@ def enrich_push(results: str) -> dict:
         stats = enrich.push(conn, payload)
         graph.rebuild(conn)
         return stats
+
+
+# ---------------------------------------------------------------------------
+# meetings — driven by the /brain-meetings skill, not by this server
+# ---------------------------------------------------------------------------
+
+@server.tool(description="List Circleback meetings in a date window, marking the ones the brain "
+                         "already holds. Read-only: syncs nothing. Show the user this list and "
+                         "let them choose before calling meetings_sync.")
+def meetings_list(days: int = 30, query: str | None = None) -> dict:
+    with _conn() as conn:
+        listing = meetings.list_meetings(conn, max(1, min(days, 365)), query)
+        rows = listing["meetings"]
+        return {"meetings": rows, "count": len(rows),
+                "unsynced": sum(1 for r in rows if not r["synced"]),
+                "truncated": listing["truncated"]}
+
+
+@server.tool(description="Fetch transcripts for the meeting ids the user chose and queue them for "
+                         "summarising. `meeting_ids` is a JSON array of ids from meetings_list. "
+                         "Never call this without an explicit choice from the user.")
+def meetings_sync(meeting_ids: str) -> dict:
+    payload = _parse(meeting_ids, "meeting_ids")
+    if isinstance(payload, dict):
+        # An object without the wrapper key used to fall through as an empty
+        # selection and report success having synced nothing.
+        if "meeting_ids" not in payload:
+            raise ValueError('an object must wrap the ids under "meeting_ids"')
+        payload = payload["meeting_ids"]
+    if not isinstance(payload, list):
+        raise ValueError("meeting_ids must be a JSON array of meeting ids")
+    with _conn() as conn:
+        result = meetings.sync(conn, [str(i) for i in payload])
+        result["next"] = "Run reindex, then summarise with the brain-meetings skill."
+        return result
+
+
+@server.tool(description="Lease the next batch of synced transcripts awaiting a summary. Used by "
+                         "the brain-meetings skill; returns the full transcript text.")
+def meetings_pull(limit: int = 5) -> dict:
+    with _conn() as conn:
+        batch = meetings.pull(conn, max(1, min(limit, 20)))
+        return {"batch": batch, "count": len(batch),
+                "pending": conn.execute(
+                    "SELECT COUNT(*) FROM meeting_queue WHERE status = 'pending'").fetchone()[0]}
+
+
+@server.tool(description="Write meeting summaries back into the brain. `results` is a JSON array "
+                         'of {"meeting_id","summary","facts":["predicate:: value"],'
+                         '"related":["entity"]}. Each becomes a captured note.')
+def meetings_push(results: str) -> dict:
+    payload = _parse(results, "results")
+    if isinstance(payload, dict):
+        if "results" not in payload:
+            raise ValueError('an object must wrap the summaries under "results"')
+        payload = payload["results"]
+    if not isinstance(payload, list):
+        raise ValueError("results must be a JSON array of meeting results")
+    with _conn() as conn:
+        return meetings.push(conn, payload)
 
 
 @server.tool(description="Fold duplicate entities together. Only merges pairs where each side was "

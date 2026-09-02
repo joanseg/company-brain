@@ -16,9 +16,11 @@ from . import db, ingest
 
 def _upsert_source(conn: sqlite3.Connection, source: dict) -> int:
     conn.execute(
-        "INSERT INTO sources(name, root, weight, added_at) VALUES(?,?,?,?) "
-        "ON CONFLICT(name) DO UPDATE SET root = excluded.root, weight = excluded.weight",
+        "INSERT INTO sources(name, root, weight, enrich, added_at) VALUES(?,?,?,?,?) "
+        "ON CONFLICT(name) DO UPDATE SET root = excluded.root, weight = excluded.weight, "
+        "  enrich = excluded.enrich",
         (source["name"], str(source["root"]), source["weight"],
+         int(source.get("enrich", True)),
          datetime.now(timezone.utc).isoformat(timespec="seconds")),
     )
     return conn.execute("SELECT id FROM sources WHERE name = ?", (source["name"],)).fetchone()["id"]
@@ -130,9 +132,15 @@ def _prune_and_enqueue(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM chunks_fts WHERE rowid NOT IN (SELECT id FROM chunks)")
     conn.execute("DELETE FROM vectors WHERE sha NOT IN (SELECT sha FROM chunks)")
     conn.execute("DELETE FROM enrich_queue WHERE sha NOT IN (SELECT sha FROM chunks)")
+    # A source with enrich=0 stays fully searchable but is never entity-extracted,
+    # so bulk material like meeting transcripts cannot become a graph hub and
+    # distort the personalised-PageRank rerank.
     conn.execute(
         "INSERT OR IGNORE INTO enrich_queue(sha, status, updated_at) "
-        "SELECT DISTINCT sha, 'pending', ? FROM chunks",
+        "SELECT DISTINCT c.sha, 'pending', ? FROM chunks c "
+        "JOIN documents d ON d.id = c.doc_id "
+        "JOIN sources s ON s.id = d.source_id "
+        "WHERE s.enrich = 1",
         (datetime.now(timezone.utc).isoformat(timespec="seconds"),),
     )
 
@@ -153,6 +161,7 @@ def status(conn: sqlite3.Connection) -> dict:
         "communities": one("SELECT COUNT(*) FROM communities"),
         "assertions": one("SELECT COUNT(*) FROM assertions"),
         "enrich_pending": one("SELECT COUNT(*) FROM enrich_queue WHERE status = 'pending'"),
+        "meetings_pending": one("SELECT COUNT(*) FROM meeting_queue WHERE status = 'pending'"),
         "by_source": [dict(r) for r in conn.execute(
             "SELECT s.name, s.weight, COUNT(DISTINCT d.id) AS documents, COUNT(c.id) AS chunks "
             "FROM sources s LEFT JOIN documents d ON d.source_id = s.id "

@@ -64,6 +64,14 @@ The number is trust weight, feeding directly into ranking. The anchor repo is
 `1.0`; everything else should normally sit below it. Version-history folders,
 `node_modules` and dotfiles are skipped automatically.
 
+**A meeting.** `/brain-meetings` — list your Circleback meetings and sync the
+ones you pick. Needs a Circleback API key in the plugin's settings. Transcripts
+become searchable but never enter the knowledge graph; the summaries do.
+
+Nothing syncs automatically — you pick each meeting from the list. The summary
+itself is written by a subagent in your own session, reading the raw
+transcript; Circleback's own AI notes and action items are never used.
+
 ## Keeping it honest
 
 | When | Run | What it does |
@@ -75,7 +83,8 @@ The number is trust weight, feeding directly into ranking. The anchor repo is
 ## Reference
 
 **Commands** — `/brain-ask` · `/brain-add` · `/brain-index` · `/brain-enrich` ·
-`/brain-source` · `/brain-dream` · `/brain-view` · `/brain-setup`
+`/brain-source` · `/brain-meetings` · `/brain-dream` · `/brain-view` ·
+`/brain-setup`
 
 **Tools** — `search_evidence` · `search_themes` · `entity` · `neighbours` ·
 `remember` · `status` · `reindex` · `sources` · `add_source` · `maintenance` ·
